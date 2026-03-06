@@ -274,3 +274,250 @@ curl -X POST "https://yourapp.com/api/projects/proj_abc123/public" \
 <Note>
   Projects without valid database connections cannot be made public. The API will automatically set `isPublic` to false and remove the `idPublic` if there are no valid connections.
 </Note>
+
+---
+
+## List Project Connections
+
+<ParamField query="projectId" type="string" required>
+  The ID of the project whose connections to list
+</ParamField>
+
+### Request
+
+```http
+GET /api/listconnections?projectId={projectId}
+```
+
+### Authentication
+
+Requires an active session. Only the project owner can list connections.
+
+### Response
+
+<ResponseField name="connections" type="array">
+  Array of connection summary objects
+  
+  <ResponseField name="id" type="string">
+    Unique connection identifier
+  </ResponseField>
+  
+  <ResponseField name="title" type="string">
+    Connection title/name
+  </ResponseField>
+  
+  <ResponseField name="lastIntrospectionAt" type="string | null">
+    ISO timestamp of last schema introspection (null if never introspected)
+  </ResponseField>
+  
+  <ResponseField name="hasSchema" type="boolean">
+    Whether the connection has an introspected schema stored
+  </ResponseField>
+  
+  <ResponseField name="isValid" type="boolean | undefined">
+    Connection validation status (undefined if not yet validated)
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Error message if the request failed
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+```javascript fetch
+const response = await fetch('/api/listconnections?projectId=proj_abc123', {
+  method: 'GET',
+  credentials: 'include'
+});
+
+const data = await response.json();
+```
+
+```bash cURL
+curl -X GET "https://yourapp.com/api/listconnections?projectId=proj_abc123" \
+  -H "Cookie: session=..." 
+```
+</CodeGroup>
+
+<CodeGroup>
+```json 200 Success
+{
+  "connections": [
+    {
+      "id": "conn_xyz789",
+      "title": "Production Database",
+      "lastIntrospectionAt": "2026-03-06T12:00:00.000Z",
+      "hasSchema": true,
+      "isValid": true
+    },
+    {
+      "id": "conn_abc456",
+      "title": "Analytics DB",
+      "lastIntrospectionAt": null,
+      "hasSchema": false,
+      "isValid": false
+    }
+  ]
+}
+```
+
+```json 400 Invalid projectId
+{
+  "connections": [],
+  "error": "projectId is invalid or missing"
+}
+```
+
+```json 401 Unauthorized
+{
+  "error": "Unauthorized"
+}
+```
+
+```json 500 Server Error
+{
+  "connections": [],
+  "error": "Error al listar conexiones."
+}
+```
+</CodeGroup>
+
+<Info>
+  This endpoint is useful for getting a quick overview of all connections in a project, including their validation and schema status.
+</Info>
+
+---
+
+## Get Compatible Tables
+
+Find tables that exist across multiple database connections with matching schemas.
+
+<ParamField body="connectionIds" type="string[]" required>
+  Array of connection IDs to compare (minimum 2 required)
+</ParamField>
+
+### Request
+
+```http
+POST /api/compatible-tables
+```
+
+### Authentication
+
+Public endpoint - no authentication required.
+
+### Request Body
+
+```json
+{
+  "connectionIds": ["conn_xyz789", "conn_abc456"]
+}
+```
+
+### Behavior
+
+- Retrieves schemas for all specified connections
+- Finds tables that exist in all connections
+- Verifies that matching tables have identical column names and data types
+- Returns only tables where the schema is fully compatible across all connections
+
+### Response
+
+<ResponseField name="compatibleTables" type="string[]">
+  Array of table names that exist with matching schemas in all connections
+</ResponseField>
+
+<ResponseField name="details" type="object">
+  Dictionary mapping table names to their column information
+  
+  <Expandable title="Table Details">
+    <ResponseField name="columns" type="array">
+      Array of column objects
+      
+      <ResponseField name="name" type="string">
+        Column name
+      </ResponseField>
+      
+      <ResponseField name="type" type="string">
+        Column data type
+      </ResponseField>
+    </ResponseField>
+  </Expandable>
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Error message if the request failed
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+```javascript fetch
+const response = await fetch('/api/compatible-tables', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  body: JSON.stringify({
+    connectionIds: ['conn_xyz789', 'conn_abc456', 'conn_def123']
+  })
+});
+
+const data = await response.json();
+```
+
+```bash cURL
+curl -X POST "https://yourapp.com/api/compatible-tables" \
+  -H "Content-Type: application/json" \
+  -d '{"connectionIds": ["conn_xyz789", "conn_abc456"]}'
+```
+</CodeGroup>
+
+<CodeGroup>
+```json 200 Success
+{
+  "compatibleTables": ["users", "products", "orders"],
+  "details": {
+    "users": {
+      "columns": [
+        { "name": "id", "type": "integer" },
+        { "name": "email", "type": "varchar" },
+        { "name": "created_at", "type": "timestamp" }
+      ]
+    },
+    "products": {
+      "columns": [
+        { "name": "id", "type": "integer" },
+        { "name": "name", "type": "varchar" },
+        { "name": "price", "type": "numeric" }
+      ]
+    },
+    "orders": {
+      "columns": [
+        { "name": "id", "type": "integer" },
+        { "name": "user_id", "type": "integer" },
+        { "name": "total", "type": "numeric" }
+      ]
+    }
+  }
+}
+```
+
+```json 400 Invalid Request
+{
+  "error": "Two or more connection IDs are required."
+}
+```
+
+```json 500 Server Error
+{
+  "error": "Error fetching compatible tables"
+}
+```
+</CodeGroup>
+
+<Info>
+  This endpoint is used by the Integrated DataTable widget to find tables that can be compared across multiple database connections.
+</Info>
