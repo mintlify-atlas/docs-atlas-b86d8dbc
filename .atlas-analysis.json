@@ -1,0 +1,126 @@
+{
+  "projectType": "saas",
+  "projectName": "VizBoard",
+  "projectDescription": "A data visualization platform that connects to PostgreSQL databases and creates interactive dashboards with dynamic tables and customizable charts.",
+  "theme": "palm",
+  "primaryColor": "#ee6d2d",
+  "lightColor": "#36ab56",
+  "darkColor": "#73a2f0",
+  "navigation": {
+    "tabs": [
+      {
+        "tab": "Documentation",
+        "groups": [
+          {
+            "group": "Get Started",
+            "pages": [
+              "introduction",
+              "installation",
+              "quickstart"
+            ]
+          },
+          {
+            "group": "Core Features",
+            "pages": [
+              "features/projects",
+              "features/database-connections",
+              "features/widgets",
+              "features/dashboards"
+            ]
+          },
+          {
+            "group": "Widget Types",
+            "pages": [
+              "widgets/datatables",
+              "widgets/charts",
+              "widgets/integrated-datatables",
+              "widgets/text-blocks"
+            ]
+          },
+          {
+            "group": "Guides",
+            "pages": [
+              "guides/authentication",
+              "guides/connecting-databases",
+              "guides/creating-widgets",
+              "guides/sharing-projects"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "Development",
+        "groups": [
+          {
+            "group": "Overview",
+            "pages": [
+              "development/architecture",
+              "development/tech-stack",
+              "development/project-structure"
+            ]
+          },
+          {
+            "group": "Setup",
+            "pages": [
+              "development/environment-setup",
+              "development/database-setup",
+              "development/docker"
+            ]
+          },
+          {
+            "group": "Security",
+            "pages": [
+              "development/security",
+              "development/encryption"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Server Actions",
+            "pages": [
+              "api/actions/auth",
+              "api/actions/projects",
+              "api/actions/connections",
+              "api/actions/widgets"
+            ]
+          },
+          {
+            "group": "API Routes",
+            "pages": [
+              "api/routes/projects",
+              "api/routes/widgets",
+              "api/routes/dashboard"
+            ]
+          }
+        ]
+      }
+    ]
+  },
+  "keyFeatures": [
+    "User authentication with NextAuth.js",
+    "PostgreSQL database connections with AES-256-GCM encryption",
+    "Multiple widget types (datatables, bar/line/area/pie charts)",
+    "Drag & drop dashboard builder",
+    "Public/private project sharing",
+    "Automatic database schema introspection",
+    "Real-time data visualization",
+    "Light/dark theme support"
+  ],
+  "publicApiSurface": [
+    "Server Actions: signUp, login, createProject, updateProject, deleteProject",
+    "Server Actions: createConnection, updateConnection, deleteConnection, testConnection",
+    "Server Actions: createWidget, updateWidget, deleteWidget, updateWidgetOrder",
+    "Server Actions: getTableData, getDashboardData",
+    "API Routes: GET/POST /api/projects/[projectId]/dashboard",
+    "API Routes: GET /api/projects/[projectId]/public",
+    "API Routes: PATCH /api/projects/[projectId]/widgets/order",
+    "API Routes: GET/PATCH/DELETE /api/widgets/[widgetId]",
+    "API Routes: GET /api/listconnections",
+    "API Routes: GET /api/compatible-tables",
+    "Widget Types: simple_dataTable, integrated_dataTable, bar_charts, line_charts, area_charts, pie_charts, text_titles"
+  ]
+}
