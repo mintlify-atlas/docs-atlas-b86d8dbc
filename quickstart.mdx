@@ -1,80 +1,513 @@
 ---
-title: "Quickstart"
-description: "Start building awesome documentation in minutes"
+title: Quickstart Guide
+description: Create your first VizBoard dashboard in 5 minutes - from signup to visualizing data
 ---
 
-## Get started in three steps
+## Overview
 
-Get your documentation site running locally and make your first customization.
+This guide will walk you through creating your first VizBoard dashboard in just 5 minutes. You'll learn how to:
 
-### Step 1: Set up your local environment
-
-<AccordionGroup>
-  <Accordion icon="copy" title="Clone your docs locally">
-    During the onboarding process, you created a GitHub repository with your docs content if you didn't already have one. You can find a link to this repository in your [dashboard](https://dashboard.mintlify.com).
-    
-    To clone the repository locally so that you can make and preview changes to your docs, follow the [Cloning a repository](https://docs.github.com/en/repositories/creating-and-managing-repositories/cloning-a-repository) guide in the GitHub docs.
-  </Accordion>
-  <Accordion icon="rectangle-terminal" title="Start the preview server">
-    1. Install the Mintlify CLI: `npm i -g mint`
-    2. Navigate to your docs directory and run: `mint dev`
-    3. Open `http://localhost:3000` to see your docs live!
-    
-    <Tip>Your preview updates automatically as you edit files.</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 2: Deploy your changes
-
-<AccordionGroup>
-  <Accordion icon="github" title="Install our GitHub app">
-    Install the Mintlify GitHub app from your [dashboard](https://dashboard.mintlify.com/settings/organization/github-app).
-    
-    Our GitHub app automatically deploys your changes to your docs site, so you don't need to manage deployments yourself.
-</Accordion>
-<Accordion icon="palette" title="Update your site name and colors">
-    For a first change, let's update the name and colors of your docs site.
-
-    1. Open `docs.json` in your editor.
-    2. Change the `"name"` field to your project name.
-    3. Update the `"colors"` to match your brand.
-    4. Save and see your changes instantly at `http://localhost:3000`.
-
-    <Tip>Try changing the primary color to see an immediate difference!</Tip>
-  </Accordion>
-</AccordionGroup>
-
-### Step 3: Go live
-
-<Accordion icon="rocket" title="Publish your docs">
-  1. Commit and push your changes.
-  2. Your docs will update and be live in moments!
-</Accordion>
-
-## Next steps
-
-Now that you have your docs running, explore these key features:
-
-<CardGroup cols={2}>
-
-<Card title="Write Content" icon="pen-to-square" href="/essentials/markdown">
-  Learn MDX syntax and start writing your documentation.
-</Card>
-
-<Card title="Customize style" icon="palette" href="/essentials/settings">
-  Make your docs match your brand perfectly.
-</Card>
-
-<Card title="Add code examples" icon="square-code" href="/essentials/code">
-  Include syntax-highlighted code blocks.
-</Card>
-
-<Card title="API documentation" icon="code" href="/api-reference/introduction">
-  Auto-generate API docs from OpenAPI specs.
-</Card>
-
-</CardGroup>
+1. Create an account and sign in
+2. Create your first project
+3. Add a database connection
+4. Create visualization widgets
+5. Customize your dashboard
 
 <Note>
-  **Need help?** See our [full documentation](https://mintlify.com/docs) or join our [community](https://mintlify.com/community).
+  This guide assumes you've already completed the [installation](/installation) steps and have VizBoard running locally with seeded test databases.
+</Note>
+
+## Getting Started
+
+<Steps>
+  <Step title="Create Your Account">
+    Navigate to VizBoard at `http://localhost:3000` and create an account.
+    
+    **Option 1: Email/Password Registration**
+    
+    1. Click **"Sign Up"** on the homepage
+    2. Fill in the registration form:
+       - First Name: Your first name
+       - Last Name: Your last name
+       - Email: Your email address
+       - Password: A secure password (minimum 8 characters)
+    3. Click **"Create Account"**
+    
+    **Option 2: OAuth Sign In**
+    
+    Alternatively, sign in with:
+    - **Google**: Click the Google button
+    - **GitHub**: Click the GitHub button
+    
+    <Note>
+      The registration process is handled by NextAuth.js with secure password hashing using bcrypt.
+    </Note>
+    
+    After successful registration, you'll be automatically signed in and redirected to the projects page.
+  </Step>
+
+  <Step title="Create Your First Project">
+    Projects are the top-level containers for organizing your dashboards and database connections.
+    
+    1. On the **Projects** page, click **"Create New Project"**
+    2. Fill in the project details:
+       ```
+       Title: Sales Analytics Dashboard
+       Description: Visualize store sales and product performance
+       Visibility: Private (or Public for shareable dashboards)
+       ```
+    3. Click **"Create Project"**
+    
+    You can create projects without database connections initially (drafts), but you'll need at least one valid connection to make the project public or add widgets.
+    
+    <Note>
+      Projects with the **Public** toggle enabled get a unique shareable URL that anyone can view without authentication.
+    </Note>
+  </Step>
+
+  <Step title="Add a Database Connection">
+    Connect to one of the seeded test databases to start visualizing data.
+    
+    1. Inside your project, click **"Add Database Connection"**
+    2. Enter the connection details for the first test database:
+    
+    ```
+    Connection Name: Store Database
+    Host: localhost
+    Port: 5433
+    Database: vizboard_test1
+    Username: postgres
+    Password: testdbpass1234
+    ```
+    
+    3. Click **"Test Connection"** to verify it works
+    4. Click **"Save Connection"**
+    
+    VizBoard will:
+    - Encrypt the credentials using AES-256-GCM encryption
+    - Store them securely in the database
+    - Automatically introspect the database schema (tables, columns, types)
+    - Validate the connection and mark it as active
+    
+    <Warning>
+      Never connect to production databases without proper security measures. Always use read-only credentials for VizBoard connections.
+    </Warning>
+    
+    **Available Test Databases:**
+    
+    If you ran the seed scripts, you have three test databases available:
+    
+    | Database | Port | Tables | Data |
+    |----------|------|--------|------|
+    | vizboard_test1 | 5433 | users, products, sales, reviews | Store e-commerce data |
+    | vizboard_test2 | 5434 | users, products, sales, reviews | Alternative store data |
+    | vizboard_test3 | 5435 | clients, commandes, api_request_event | Client orders and API logs |
+    
+    You can add multiple connections to compare data across databases.
+  </Step>
+
+  <Step title="Create Your First Widget - Data Table">
+    Now let's visualize some data with a simple data table.
+    
+    1. Click **"Add Widget"** on your project dashboard
+    2. Select **"Data Table"** as the widget type
+    3. Configure the widget:
+    
+    ```
+    Widget Title: Recent Sales
+    Widget Description: Latest sales transactions
+    Widget Type: Simple DataTable
+    Database Connection: Store Database
+    Table: sales
+    Columns: Select all or specific columns (id, product_name, quantity, price, sale_date)
+    ```
+    
+    4. Click **"Create Widget"**
+    
+    The widget will appear on your dashboard, displaying the sales data in an interactive table with:
+    - **Sorting**: Click column headers to sort
+    - **Filtering**: Search and filter rows
+    - **Pagination**: Navigate through large datasets
+    
+    <Note>
+      Data tables are powered by TanStack Table, providing enterprise-grade table functionality with minimal configuration.
+    </Note>
+  </Step>
+
+  <Step title="Create a Chart Widget">
+    Visualize your data with interactive charts.
+    
+    1. Click **"Add Widget"** again
+    2. Select **"Chart"** as the widget type
+    3. Choose a chart subtype: **Bar Chart**
+    4. Configure the chart:
+    
+    ```
+    Widget Title: Sales by Product
+    Widget Description: Compare product sales performance
+    Widget Type: Chart
+    Chart Type: Bar Chart
+    Database Connection: Store Database
+    Table: sales
+    X-Axis: product_name
+    Y-Axis: quantity
+    Aggregation: Sum
+    Group By: product_name
+    ```
+    
+    5. Click **"Create Widget"**
+    
+    The chart will render using Recharts, showing a bar chart of total quantities sold per product.
+    
+    **Available Chart Types:**
+    
+    - **Bar Chart**: Compare categorical data side-by-side
+    - **Line Chart**: Show trends over time
+    - **Area Chart**: Display cumulative values with filled areas
+    
+    **Aggregation Options:**
+    
+    - **Sum**: Total of all values
+    - **Average**: Mean value
+    - **Count**: Number of records
+    
+    <Note>
+      Charts automatically update when you change the configuration, making it easy to explore different visualizations.
+    </Note>
+  </Step>
+
+  <Step title="Organize Your Dashboard">
+    Customize your dashboard layout with drag-and-drop.
+    
+    1. **Drag & Drop Widgets**: Click and drag widgets to reorder them
+    2. **Edit Widgets**: Click the edit icon to modify configuration
+    3. **Delete Widgets**: Click the delete icon to remove widgets
+    4. **Add More Widgets**: Continue adding tables and charts
+    
+    VizBoard uses `@dnd-kit` for smooth, accessible drag-and-drop functionality. Widget order is automatically saved to your project.
+  </Step>
+
+  <Step title="Add Multiple Database Connections (Advanced)">
+    Compare data across multiple databases with integrated widgets.
+    
+    1. Add a second database connection (e.g., vizboard_test2):
+    
+    ```
+    Connection Name: Store Database 2
+    Host: localhost
+    Port: 5434
+    Database: vizboard_test2
+    Username: postgres
+    Password: testdbpass1234
+    ```
+    
+    2. Create an **Integrated DataTable**:
+       - Select multiple database connections
+       - Choose tables from each connection
+       - VizBoard will combine the data for side-by-side comparison
+    
+    This is perfect for:
+    - Comparing production vs. staging data
+    - Multi-tenant analytics
+    - Cross-region comparisons
+  </Step>
+</Steps>
+
+## Example: Complete Dashboard
+
+Here's what a complete VizBoard dashboard might look like:
+
+### Sales Analytics Dashboard
+
+**Project Configuration:**
+```typescript
+{
+  title: "Sales Analytics Dashboard",
+  description: "Real-time sales and product performance",
+  isPublic: false,
+  connections: [
+    {
+      title: "Store Database",
+      host: "localhost",
+      port: 5433,
+      database: "vizboard_test1"
+    }
+  ]
+}
+```
+
+**Widgets:**
+
+1. **Recent Sales Table**
+   - Type: Simple DataTable
+   - Table: `sales`
+   - Columns: `id`, `product_name`, `quantity`, `price`, `sale_date`
+   - Shows last 50 transactions with sorting and filtering
+
+2. **Sales by Product Chart**
+   - Type: Bar Chart
+   - X-Axis: `product_name`
+   - Y-Axis: `quantity` (Sum)
+   - Shows total units sold per product
+
+3. **Revenue Over Time Chart**
+   - Type: Line Chart
+   - X-Axis: `sale_date`
+   - Y-Axis: `price` (Sum)
+   - Shows revenue trends over time
+
+4. **Product Reviews Table**
+   - Type: Simple DataTable
+   - Table: `reviews`
+   - Columns: `product_name`, `rating`, `comment`, `created_at`
+   - Shows customer feedback
+
+5. **Average Rating by Product Chart**
+   - Type: Bar Chart
+   - X-Axis: `product_name`
+   - Y-Axis: `rating` (Average)
+   - Shows product satisfaction scores
+
+## Code Examples
+
+### Creating a Project Programmatically
+
+VizBoard uses Next.js Server Actions for type-safe API calls:
+
+```typescript src/app/actions/project/crud.ts
+import { createProjectWithConnections } from "@/app/actions/project/crud"
+
+// Create project with database connection
+const result = await createProjectWithConnections({
+  userId: session.user.id,
+  title: "Sales Analytics",
+  description: "Store performance dashboard",
+  isPublic: false,
+  connections: [
+    {
+      title: "Store Database",
+      host: "localhost",
+      port: 5433,
+      database: "vizboard_test1",
+      user: "postgres",
+      password: "testdbpass1234"
+    }
+  ]
+})
+
+if (result.success) {
+  console.log("Project created:", result.projectId)
+  // Auto-introspection runs automatically for valid connections
+}
+```
+
+### Creating a Widget
+
+```typescript src/app/actions/dashboard/crudWidgets.ts
+import { createWidget } from "@/app/actions/dashboard/crudWidgets"
+
+// Create a bar chart widget
+const widget = await createWidget({
+  projectId: "project-uuid",
+  title: "Sales by Product",
+  description: "Total units sold per product",
+  type: "chart",
+  subtype: "bar",
+  configs: {
+    connectionId: "connection-uuid",
+    table: "sales",
+    xAxis: "product_name",
+    yAxis: "quantity",
+    aggregation: "sum",
+    groupBy: "product_name"
+  }
+})
+
+console.log("Widget created:", widget.id)
+```
+
+### Fetching Table Data
+
+VizBoard uses Knex.js to query external databases:
+
+```typescript src/app/actions/dashboard/getTableData.ts
+import knex from "knex"
+import { decrypt } from "@/lib/crypto/crypto"
+
+// Fetch data from external database
+const connection = await prisma.dbConnection.findUnique({
+  where: { id: connectionId }
+})
+
+// Decrypt credentials
+const credentials = JSON.parse(decrypt(connection.dbAccess))
+
+// Create Knex instance
+const db = knex({
+  client: "pg",
+  connection: credentials
+})
+
+// Query data
+const data = await db("sales")
+  .select("product_name", "quantity", "price")
+  .orderBy("sale_date", "desc")
+  .limit(50)
+
+return data
+```
+
+## Best Practices
+
+### Security
+
+- **Read-Only Credentials**: Use database users with SELECT-only permissions
+- **Network Isolation**: Only connect to databases on trusted networks
+- **Regular Key Rotation**: Rotate `ENCRYPTION_KEY` and `AUTH_SECRET` periodically
+- **Private Projects**: Keep sensitive data in private projects
+
+### Performance
+
+- **Limit Large Tables**: Use filters and pagination for tables with millions of rows
+- **Index Columns**: Ensure queried columns are indexed in your database
+- **Connection Pooling**: VizBoard uses connection pooling automatically with Knex.js
+- **Caching**: SWR caches widget data for fast navigation
+
+### Dashboard Design
+
+- **Focused Dashboards**: Create separate projects for different use cases
+- **Descriptive Names**: Use clear widget titles and descriptions
+- **Consistent Styling**: Take advantage of VizBoard's theming for cohesive design
+- **Regular Updates**: Regenerate schemas when your database structure changes
+
+## Troubleshooting
+
+### Connection Failed
+
+If your database connection fails:
+
+1. **Verify Credentials**: Double-check host, port, username, and password
+2. **Check Network**: Ensure the database is accessible from VizBoard
+3. **Firewall Rules**: Add VizBoard's IP to database firewall allowlist
+4. **Database Running**: Verify the database container is running: `docker ps`
+
+```bash
+# Test connection manually
+docker exec -it <container-name> psql -U postgres -d vizboard_test1 -c "SELECT 1;"
+```
+
+### Widget Not Showing Data
+
+If a widget appears empty:
+
+1. **Schema Introspection**: Regenerate schema in project settings
+2. **Table Exists**: Verify the table exists in the database
+3. **Permissions**: Ensure database user has SELECT permission
+4. **Data Exists**: Check if the table has data: `SELECT * FROM table_name LIMIT 1;`
+
+### Slow Dashboard Loading
+
+If your dashboard is slow:
+
+1. **Large Tables**: Add LIMIT clauses or filters to widgets
+2. **Too Many Widgets**: Consider splitting into multiple projects
+3. **Unindexed Columns**: Add database indexes on frequently queried columns
+4. **Network Latency**: Use local or nearby databases for best performance
+
+## Next Steps
+
+Now that you've created your first dashboard, explore more features:
+
+<CardGroup cols={2}>
+  <Card title="Add More Widgets" icon="chart-mixed">
+    Experiment with different chart types and table configurations
+  </Card>
+  
+  <Card title="Share Your Dashboard" icon="share">
+    Make your project public and share the URL with your team
+  </Card>
+  
+  <Card title="Connect Production Data" icon="database">
+    Connect to your real databases (with read-only credentials)
+  </Card>
+  
+  <Card title="Customize Themes" icon="palette">
+    Switch between light and dark themes in your profile settings
+  </Card>
+</CardGroup>
+
+## API Reference
+
+VizBoard uses Next.js Server Actions for all API operations. Key actions:
+
+### Project Actions
+
+- `createProjectWithConnections()`: Create project with database connections
+- `updateProject()`: Update project details and connections
+- `deleteProject()`: Delete project and all widgets
+- `getUserProjects()`: Get all projects for current user
+- `regenerateProjectSchemas()`: Re-introspect all database schemas
+
+### Widget Actions
+
+- `createWidget()`: Create a new visualization widget
+- `updateWidget()`: Update widget configuration
+- `deleteWidget()`: Remove widget from dashboard
+- `updateWidgetOrder()`: Change widget order on dashboard
+
+### Connection Actions
+
+- `deleteConnection()`: Remove a database connection
+- `getProjectSchema()`: Get introspected database schema
+
+All actions include:
+- Authentication checks
+- Input validation with Zod
+- Error handling
+- Automatic cache revalidation
+
+## Example Database Schema
+
+The seeded test databases include these tables:
+
+```sql
+-- Store Database (test1, test2)
+CREATE TABLE users (
+  id SERIAL PRIMARY KEY,
+  first_name VARCHAR(100),
+  last_name VARCHAR(100),
+  email VARCHAR(255) UNIQUE,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE products (
+  id SERIAL PRIMARY KEY,
+  name VARCHAR(255),
+  category VARCHAR(100),
+  price DECIMAL(10,2),
+  stock INTEGER,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE sales (
+  id SERIAL PRIMARY KEY,
+  product_name VARCHAR(255),
+  quantity INTEGER,
+  price DECIMAL(10,2),
+  sale_date TIMESTAMP DEFAULT NOW()
+);
+
+CREATE TABLE reviews (
+  id SERIAL PRIMARY KEY,
+  product_name VARCHAR(255),
+  rating INTEGER CHECK (rating >= 1 AND rating <= 5),
+  comment TEXT,
+  created_at TIMESTAMP DEFAULT NOW()
+);
+```
+
+These tables contain realistic sample data generated with Faker.js, perfect for testing VizBoard's visualization capabilities.
+
+<Note>
+  Ready to dive deeper? Check out the [Installation Guide](/installation) for production deployment tips or explore the source code on GitHub.
 </Note>

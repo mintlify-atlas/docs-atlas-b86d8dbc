@@ -1,0 +1,462 @@
+---
+title: Installation Guide
+description: Complete setup instructions for VizBoard including Docker, PostgreSQL, environment configuration, and database migrations
+---
+
+## Prerequisites
+
+Before installing VizBoard, ensure you have the following installed on your system:
+
+- **Node.js**: Version 20.x or higher ([Download](https://nodejs.org/))
+- **Docker**: For running PostgreSQL databases ([Download](https://www.docker.com/))
+- **Docker Compose**: Version 3.8+ (usually included with Docker Desktop)
+- **Git**: For cloning the repository
+
+<Note>
+  VizBoard requires Node.js 20 or higher due to its use of Next.js 15 and React 19 features.
+</Note>
+
+## Installation Steps
+
+<Steps>
+  <Step title="Clone the Repository">
+    Clone the VizBoard repository to your local machine:
+    
+    ```bash
+    git clone https://github.com/your-org/vizboard.git
+    cd vizboard
+    ```
+  </Step>
+
+  <Step title="Install Dependencies">
+    Install all required npm packages:
+    
+    ```bash
+    npm install
+    ```
+    
+    This will install all dependencies including Next.js, React, Prisma, and visualization libraries.
+  </Step>
+
+  <Step title="Configure Environment Variables">
+    Create a `.env` file in the project root with the required configuration:
+    
+    ```bash
+    touch .env
+    ```
+    
+    Add the following environment variables to your `.env` file:
+    
+    ```env
+    # Main application database (PostgreSQL)
+    DATABASE_URL="postgresql://postgres:postgres@localhost:5432/vizboard_main?schema=public"
+    
+    # NextAuth configuration
+    AUTH_SECRET="your-random-very-long-and-secure-secret-minimum-32-characters"
+    # Generate with: openssl rand -base64 32
+    
+    # Application URL
+    NEXTAUTH_URL="http://localhost:3000"
+    
+    # Encryption key for database credentials (32 bytes in base64)
+    ENCRYPTION_KEY="your-32-byte-encryption-key-in-base64"
+    # Generate with: node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+    
+    # Optional: Development mode
+    NODE_ENV="development"
+    ```
+    
+    <Warning>
+      Never commit your `.env` file to version control. The `.gitignore` file already excludes it.
+    </Warning>
+  </Step>
+
+  <Step title="Generate Security Keys">
+    Generate secure keys for authentication and encryption:
+    
+    **Generate AUTH_SECRET** (for NextAuth.js):
+    ```bash
+    openssl rand -base64 32
+    ```
+    
+    **Generate ENCRYPTION_KEY** (for database credential encryption):
+    ```bash
+    node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+    ```
+    
+    Copy these generated values into your `.env` file.
+    
+    <Note>
+      The `AUTH_SECRET` is used by NextAuth.js for JWT token signing. The `ENCRYPTION_KEY` is used to encrypt database connection credentials with AES-256-GCM.
+    </Note>
+  </Step>
+
+  <Step title="Start PostgreSQL Databases with Docker">
+    VizBoard uses Docker Compose to manage multiple PostgreSQL databases:
+    
+    - **vizboard_main**: Application database (users, projects, widgets)
+    - **vizboard_test1, test2, test3**: Test databases for creating sample connections
+    
+    Start all database containers:
+    
+    ```bash
+    docker-compose up -d
+    ```
+    
+    Verify all containers are running:
+    
+    ```bash
+    docker ps
+    ```
+    
+    You should see 4 PostgreSQL containers running:
+    
+    | Container | Port | Database | Purpose |
+    |-----------|------|----------|----------|
+    | `db_main` | 5432 | vizboard_main | Application database |
+    | `db_test1` | 5433 | vizboard_test1 | Sample data for testing |
+    | `db_test2` | 5434 | vizboard_test2 | Sample data for testing |
+    | `db_test3` | 5435 | vizboard_test3 | Sample data for testing |
+  </Step>
+
+  <Step title="Run Database Migrations">
+    Apply Prisma migrations to set up the application database schema:
+    
+    ```bash
+    npm run db:migrate
+    ```
+    
+    This creates all necessary tables including:
+    - `users`: User accounts and authentication
+    - `accounts`: OAuth provider accounts
+    - `projects`: Dashboard projects
+    - `dbconnections`: External database connections (with encrypted credentials)
+    - `widgets`: Visualization widgets
+    
+    <Note>
+      Migrations are stored in `prisma/migrations/` and track your database schema changes over time.
+    </Note>
+  </Step>
+
+  <Step title="Seed Test Databases (Optional)">
+    Populate test databases with sample data for exploring VizBoard features:
+    
+    ```bash
+    npm run seed:test-dbs
+    ```
+    
+    This script seeds all three test databases with realistic data:
+    
+    - **vizboard_test1 & test2**: Store data (users, products, sales, reviews)
+    - **vizboard_test3**: Client data, orders, and API request events
+    
+    You can also seed individual databases:
+    
+    ```bash
+    # Seed store data to test1 and test2
+    npm run seed:store
+    
+    # Seed client data to test3
+    npm run seed:clients
+    
+    # Seed order data to test3
+    npm run seed:commandes
+    
+    # Seed API events to test3
+    npm run seed:apirequestevent
+    ```
+    
+    <Note>
+      Test databases use Faker.js to generate realistic sample data, perfect for creating demo dashboards.
+    </Note>
+  </Step>
+
+  <Step title="Start the Development Server">
+    Launch VizBoard in development mode:
+    
+    ```bash
+    npm run dev
+    ```
+    
+    The application will start at **http://localhost:3000** with Turbopack for fast hot-reloading.
+    
+    You should see output like:
+    ```
+    ▲ Next.js 15.3.2
+    - Local:        http://localhost:3000
+    - Turbopack:    enabled
+    
+    ✓ Ready in 1.2s
+    ```
+  </Step>
+
+  <Step title="Access VizBoard">
+    Open your browser and navigate to:
+    
+    ```
+    http://localhost:3000
+    ```
+    
+    You'll see the VizBoard landing page with options to sign up or log in.
+  </Step>
+</Steps>
+
+## Docker Compose Configuration
+
+The `docker-compose.yml` file defines 4 PostgreSQL containers:
+
+```yaml docker-compose.yml
+version: "3.8"
+
+services:
+  db_main:
+    image: postgres:15
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=vizboard_main
+    volumes:
+      - postgres_data_main:/var/lib/postgresql/data
+
+  db_test1:
+    image: postgres:15
+    ports:
+      - "5433:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=testdbpass1234
+      - POSTGRES_DB=vizboard_test1
+    volumes:
+      - postgres_data_test1:/var/lib/postgresql/data
+
+  # ... test2 and test3 follow the same pattern
+```
+
+<Warning>
+  The main database (`db_main`) is for VizBoard's internal use. The test databases are external databases you can connect to from within VizBoard.
+</Warning>
+
+## Database Schema
+
+VizBoard's application database uses the following Prisma schema:
+
+```prisma prisma/schema.prisma
+model User {
+  id            String    @id @default(uuid())
+  firstName     String?
+  lastName      String?
+  email         String    @unique
+  password      String?
+  name          String
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  accounts      Account[]
+  projects      Project[]
+}
+
+model Project {
+  id                  String         @id @default(uuid())
+  userId              String
+  title               String
+  description         String?
+  isPublic            Boolean        @default(false)
+  idPublic            String?        @unique
+  orderedWidgetIds    String[]
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  lastIntrospectionAt DateTime?
+  user                User           @relation(fields: [userId], references: [id])
+  dbconnections       DbConnection[]
+  widgets             Widget[]
+}
+
+model DbConnection {
+  id                  String    @id @default(uuid())
+  projectId           String
+  title               String
+  dbAccess            Json      // Encrypted credentials
+  dbSchema            Json?     // Introspected schema
+  isValid             Boolean?
+  validationError     String?
+  lastIntrospectionAt DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  project             Project   @relation(fields: [projectId], references: [id])
+}
+
+model Widget {
+  id          String   @id @default(uuid())
+  projectId   String
+  title       String
+  description String?
+  type        String   // "datatable", "chart"
+  subtype     String?  // "bar", "line", "area"
+  configs     Json?    // Widget configuration
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  project     Project  @relation(fields: [projectId], references: [id])
+}
+```
+
+## Available Scripts
+
+VizBoard provides several npm scripts for common tasks:
+
+### Development
+
+```bash
+# Start development server with Turbopack
+npm run dev
+
+# Build for production
+npm run build
+
+# Start production server
+npm run start
+
+# Run ESLint
+npm run lint
+```
+
+### Database Management
+
+```bash
+# Apply Prisma migrations
+npm run db:migrate
+
+# Reset database and reapply migrations
+npm run db:reset
+
+# Open Prisma Studio (database GUI)
+npm run db:studio
+```
+
+### Seeding Test Databases
+
+```bash
+# Seed all test databases
+npm run seed:test-dbs
+
+# Seed individual databases
+npm run seed:store          # Store data (test1, test2)
+npm run seed:clients        # Client data (test3)
+npm run seed:commandes      # Order data (test3)
+npm run seed:apirequestevent # API events (test3)
+```
+
+### Utilities
+
+```bash
+# Find unused code
+npm run find-deadcode
+```
+
+## Environment Variables Reference
+
+| Variable | Description | Example | Required |
+|----------|-------------|---------|----------|
+| `DATABASE_URL` | PostgreSQL connection string for main database | `postgresql://user:pass@localhost:5432/vizboard_main` | Yes |
+| `AUTH_SECRET` | Secret for NextAuth.js JWT signing | Generated with `openssl rand -base64 32` | Yes |
+| `NEXTAUTH_URL` | Base URL of your application | `http://localhost:3000` | Yes |
+| `ENCRYPTION_KEY` | 32-byte key for encrypting database credentials | Generated with Node.js crypto | Yes |
+| `NODE_ENV` | Environment mode | `development` or `production` | No |
+
+## Troubleshooting
+
+### Port Already in Use
+
+If port 5432 is already in use:
+
+```bash
+# Check what's using the port
+lsof -i :5432
+
+# Stop existing PostgreSQL service
+sudo systemctl stop postgresql
+
+# Or change the port in docker-compose.yml
+```
+
+### Migration Errors
+
+If migrations fail:
+
+```bash
+# Reset and reapply migrations
+npm run db:reset
+
+# Or manually reset with Prisma
+npx prisma migrate reset --force
+npx prisma migrate dev
+```
+
+### Connection Refused
+
+If the app can't connect to the database:
+
+1. Verify Docker containers are running: `docker ps`
+2. Check your `DATABASE_URL` in `.env`
+3. Ensure the database is accessible: `docker logs <container-name>`
+
+### Invalid Encryption Key
+
+If you get encryption errors:
+
+1. Ensure `ENCRYPTION_KEY` is exactly 32 bytes in base64 format
+2. Regenerate the key:
+   ```bash
+   node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+   ```
+3. Update `.env` and restart the server
+
+## Production Deployment
+
+For production deployment:
+
+<Steps>
+  <Step title="Build the Application">
+    ```bash
+    npm run build
+    ```
+  </Step>
+
+  <Step title="Set Production Environment Variables">
+    Update your `.env` or hosting platform with production values:
+    - Change `NODE_ENV` to `production`
+    - Update `NEXTAUTH_URL` to your production domain
+    - Use a secure, production-grade `DATABASE_URL`
+    - Generate new `AUTH_SECRET` and `ENCRYPTION_KEY` for production
+  </Step>
+
+  <Step title="Run Database Migrations">
+    ```bash
+    npx prisma migrate deploy
+    ```
+  </Step>
+
+  <Step title="Start the Production Server">
+    ```bash
+    npm run start
+    ```
+  </Step>
+</Steps>
+
+<Warning>
+  Never use the same `AUTH_SECRET` and `ENCRYPTION_KEY` in production as in development. Generate new, secure keys for each environment.
+</Warning>
+
+## Next Steps
+
+<CardGroup cols={2}>
+  <Card title="Quickstart Guide" icon="rocket" href="/quickstart">
+    Create your first dashboard in 5 minutes
+  </Card>
+  
+  <Card title="Introduction" icon="book" href="/introduction">
+    Learn more about VizBoard's features and capabilities
+  </Card>
+</CardGroup>

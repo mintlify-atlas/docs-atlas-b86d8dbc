@@ -1,0 +1,397 @@
+---
+title: 'Authentication'
+description: 'User registration, login, and session management with NextAuth.js'
+icon: 'lock'
+---
+
+VizBoard uses NextAuth.js for authentication, supporting multiple login methods including email/password credentials, Google OAuth, and GitHub OAuth.
+
+## Authentication Flow
+
+VizBoard implements a JWT-based session strategy with a 30-day expiration period. Sessions are managed server-side using NextAuth.js v5.
+
+### Supported Authentication Methods
+
+<CardGroup cols={3}>
+  <Card title="Email/Password" icon="envelope">
+    Traditional credentials-based authentication with bcrypt password hashing
+  </Card>
+  <Card title="Google OAuth" icon="google">
+    Sign in with your Google account
+  </Card>
+  <Card title="GitHub OAuth" icon="github">
+    Sign in with your GitHub account
+  </Card>
+</CardGroup>
+
+## User Registration
+
+New users can sign up using email and password or through OAuth providers.
+
+<Steps>
+  <Step title="Navigate to Sign Up">
+    Visit `/signup` to access the registration form.
+  </Step>
+  
+  <Step title="Choose Registration Method">
+    
+    **Option 1: Email/Password Registration**
+    
+    Fill out the registration form with:
+    - First Name
+    - Last Name
+    - Email address
+    - Password
+    
+    The system will:
+    - Convert email to lowercase for consistency
+    - Hash the password using bcrypt (salt rounds: 10)
+    - Create a full name by combining first and last names
+    - Store the user in the PostgreSQL database
+    
+    **Option 2: OAuth Registration**
+    
+    Click "Sign in with Google" or "Sign in with GitHub". The system will:
+    - Redirect to the OAuth provider
+    - Extract profile information (name, email)
+    - Create a user account with `password` set to `null`
+    - Link the OAuth account to the user
+  </Step>
+  
+  <Step title="Email Validation">
+    The system checks if the email is already registered:
+    - If the email exists with a password, registration is blocked
+    - If the email exists from OAuth only, you're prompted to use that OAuth provider
+  </Step>
+  
+  <Step title="Automatic Redirect">
+    After successful registration, users are automatically redirected to `/projects`
+  </Step>
+</Steps>
+
+### Code Reference
+
+The sign-up logic is implemented in `src/app/actions/auth/signUp.ts:8-41`:
+
+```typescript
+export async function SignUp(data: signup) {
+  const email = data.email.toLowerCase()
+  const existingUser = await getUserByEmail(email)
+  
+  if (existingUser) {
+    if (existingUser.password === null) {
+      return {
+        success: false,
+        message: "This email is already registered with Google or GitHub."
+      }
+    }
+    return { success: false, message: "This email is already registered." }
+  }
+  
+  const hashedPassword = await bcrypt.hash(password, 10)
+  await prisma.user.create({
+    data: {
+      firstName,
+      lastName,
+      email,
+      password: hashedPassword,
+      name: `${firstName} ${lastName}`
+    }
+  })
+}
+```
+
+## User Login
+
+Existing users can log in using any method they registered with.
+
+<Steps>
+  <Step title="Navigate to Login">
+    Visit `/login` to access the login form.
+  </Step>
+  
+  <Step title="Choose Login Method">
+    
+    **Credentials Login**
+    
+    Enter your email and password. The authentication flow:
+    1. Email is converted to lowercase
+    2. User is fetched from database
+    3. Password is compared using bcrypt
+    4. If successful, a JWT token is created
+    
+    **OAuth Login**
+    
+    Click your OAuth provider button. The system:
+    1. Redirects to the provider
+    2. Validates the OAuth callback
+    3. Creates or updates the user session
+  </Step>
+  
+  <Step title="Session Creation">
+    Upon successful authentication, NextAuth.js creates a JWT session with:
+    - User ID
+    - Email
+    - Name (first name + last name)
+    - First name and last name (stored separately)
+    - 30-day expiration
+  </Step>
+  
+  <Step title="Redirect to Dashboard">
+    After login, users are redirected to `/projects` (the main dashboard)
+  </Step>
+</Steps>
+
+<Warning>
+  **OAuth-Only Accounts**: If you registered with Google or GitHub, you cannot log in with email/password. The system will display: "This email is registered with Google or GitHub. Please try signing in with them."
+</Warning>
+
+### Login Form Implementation
+
+The login form uses React Hook Form with Zod validation (`src/components/auth/login-form.tsx:32-59`):
+
+```typescript
+async function CredentialsLogin(data: z.infer<typeof LoginSchema>) {
+  const result = await signIn("credentials", {
+    email: data.email.toLowerCase(),
+    password: data.password,
+    redirect: false,
+  })
+  
+  if (result?.error) {
+    toast.error("Invalid email or password")
+    return
+  }
+  
+  if (result?.ok) {
+    router.push("/projects")
+  }
+}
+```
+
+## Session Management
+
+VizBoard uses JWT-based sessions configured in `src/lib/auth/auth.ts:48-53`.
+
+### Session Configuration
+
+```typescript
+session: {
+  strategy: "jwt",
+  maxAge: 30 * 24 * 60 * 60, // 30 days
+}
+```
+
+### Session Callbacks
+
+NextAuth.js provides three key callbacks:
+
+**1. JWT Callback** (`src/lib/auth/auth.ts:174-203`)
+
+Runs when a JWT is created or updated:
+
+```typescript
+async jwt({ token, user }) {
+  if (user) {
+    token.id = user.id
+    token.email = user.email
+    token.name = user.name
+    token.firstName = user.firstName
+    token.lastName = user.lastName
+  }
+  return token
+}
+```
+
+**2. Session Callback** (`src/lib/auth/auth.ts:205-215`)
+
+Exposes JWT data to the client session:
+
+```typescript
+async session({ session, token }) {
+  if (session.user) {
+    session.user.id = token.id
+    session.user.email = token.email
+    session.user.name = token.name
+    session.user.firstName = token.firstName
+    session.user.lastName = token.lastName
+  }
+  return session
+}
+```
+
+**3. Sign In Callback** (`src/lib/auth/auth.ts:134-172`)
+
+Handles OAuth provider name extraction:
+
+```typescript
+async signIn({ user, account, profile }) {
+  if (account?.provider === "google" || account?.provider === "github") {
+    const { firstName, lastName, fullName } = getOAuthNames(account, profile)
+    user.firstName = firstName
+    user.lastName = lastName
+    user.name = fullName
+  }
+  return true
+}
+```
+
+## Protecting Routes
+
+To protect routes, use the `auth()` helper function:
+
+```typescript
+import { auth } from "@/lib/auth/auth"
+import { redirect } from "next/navigation"
+
+export default async function ProtectedPage() {
+  const session = await auth()
+  
+  if (!session?.user) {
+    redirect("/login")
+  }
+  
+  // Your protected content
+  return <div>Welcome {session.user.name}</div>
+}
+```
+
+### Example: Project Actions
+
+All project-related actions check authentication (`src/app/actions/project/crud.ts:23-26`):
+
+```typescript
+export async function createProjectWithConnections(input) {
+  const session = await auth()
+  if (!session?.user) {
+    redirect("/login")
+  }
+  // Continue with project creation
+}
+```
+
+## Database Schema
+
+User authentication data is stored in two tables:
+
+### User Table
+
+```prisma
+model User {
+  id            String    @id @default(uuid())
+  firstName     String?
+  lastName      String?
+  email         String    @unique
+  password      String?   // null for OAuth users
+  name          String
+  emailVerified DateTime?
+  image         String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  accounts      Account[]
+  projects      Project[]
+}
+```
+
+### Account Table (OAuth)
+
+```prisma
+model Account {
+  userId            String
+  type              String
+  provider          String   // "google" or "github"
+  providerAccountId String
+  refresh_token     String?
+  access_token      String?
+  expires_at        Int?
+  token_type        String?
+  scope             String?
+  id_token          String?
+  session_state     String?
+  user              User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  
+  @@id([provider, providerAccountId])
+}
+```
+
+<Note>
+  The `password` field is `null` for users who register via OAuth. This prevents credential-based login for OAuth users.
+</Note>
+
+## Environment Variables
+
+Required environment variables for authentication:
+
+```bash
+# NextAuth
+NEXTAUTH_URL=http://localhost:3000
+NEXTAUTH_SECRET=your-secret-key-here
+
+# Google OAuth
+AUTH_GOOGLE_ID=your-google-client-id
+AUTH_GOOGLE_SECRET=your-google-client-secret
+
+# GitHub OAuth
+AUTH_GITHUB_ID=your-github-client-id
+AUTH_GITHUB_SECRET=your-github-client-secret
+
+# Database
+DATABASE_URL=postgresql://user:password@localhost:5432/vizboard
+```
+
+<Warning>
+  The application will throw an error on startup if OAuth credentials are missing (`src/lib/auth/auth.ts:39-44`).
+</Warning>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Password Security" icon="shield">
+    - Passwords are hashed with bcrypt (10 rounds)
+    - Never store plain-text passwords
+    - Password field is nullable for OAuth users
+  </Card>
+  
+  <Card title="Email Normalization" icon="at">
+    - All emails are converted to lowercase
+    - Prevents duplicate accounts with different casing
+  </Card>
+  
+  <Card title="Session Security" icon="clock">
+    - JWT tokens expire after 30 days
+    - Sessions are validated on each request
+    - Use `auth()` helper to check authentication
+  </Card>
+  
+  <Card title="OAuth Integration" icon="link">
+    - OAuth accounts link automatically by email
+    - Users cannot mix OAuth and credentials
+    - Profile data extracted from provider
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+### "Invalid email or password" Error
+
+- Verify the email is correct (check for typos)
+- Ensure you're using the same authentication method you registered with
+- If you registered with OAuth, use that provider to log in
+
+### "Email already registered" Error
+
+- This email is already in use
+- Try logging in instead of signing up
+- Use the "Forgot Password" flow if needed
+
+### OAuth Provider Not Working
+
+- Check that environment variables are set correctly
+- Verify OAuth app credentials in provider console
+- Ensure redirect URIs are configured properly
+
+### Session Expires Too Quickly
+
+- JWT sessions last 30 days by default
+- Check if browser is blocking cookies
+- Verify `NEXTAUTH_SECRET` is set correctly

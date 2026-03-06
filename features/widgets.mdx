@@ -1,0 +1,561 @@
+---
+title: 'Widgets'
+description: 'Create interactive data visualizations with charts, tables, and text blocks'
+icon: 'chart-mixed'
+---
+
+## Overview
+
+Widgets are the building blocks of VizBoard dashboards. Each widget represents a data visualization or content element that displays information from your connected databases. VizBoard supports multiple widget types with various subtypes for different visualization needs.
+
+## Widget Types
+
+VizBoard provides six main widget categories:
+
+<CardGroup cols={2}>
+  <Card title="Data Tables" icon="table">
+    Display tabular data with sorting and filtering
+  </Card>
+  <Card title="Area Charts" icon="chart-area">
+    Visualize trends over time with filled area charts
+  </Card>
+  <Card title="Bar Charts" icon="chart-column">
+    Compare values with vertical and horizontal bars
+  </Card>
+  <Card title="Line Charts" icon="chart-line">
+    Show trends and changes over time
+  </Card>
+  <Card title="Pie Charts" icon="chart-pie">
+    Display proportions and percentages
+  </Card>
+  <Card title="Text Blocks" icon="text">
+    Add titles, descriptions, and formatted text
+  </Card>
+</CardGroup>
+
+### Widget Subtypes
+
+Each widget type has multiple subtypes for specific use cases:
+
+```typescript src/lib/widget.ts
+export const widgets = [
+  {
+    type: "datatables",
+    icon: Table2,
+    subtypes: ["simple_dataTable", "integrated_dataTable"],
+  },
+  {
+    type: "area_charts",
+    icon: ChartArea,
+    subtypes: ["basic_area", "linear_area", "step_area"],
+  },
+  {
+    type: "bar_charts",
+    icon: ChartColumnIncreasing,
+    subtypes: ["basic_bar", "stacked_bar", "horizontal_bar"],
+  },
+  {
+    type: "line_charts",
+    icon: ChartSpline,
+    subtypes: ["basic_line", "linear_line", "step_line"],
+  },
+  {
+    type: "pie_charts",
+    icon: ChartPie,
+    subtypes: ["basic_pie", "donut_pie", "stacked_pie"],
+  },
+  {
+    type: "text_titles",
+    icon: LetterText,
+    subtypes: ["section_title", "text_block"],
+  },
+];
+```
+
+## Widget Structure
+
+Every widget in VizBoard has a consistent structure:
+
+```typescript
+interface Widget {
+  id: string;              // Unique identifier
+  projectId: string;       // Parent project
+  title: string;           // Widget title
+  description?: string;    // Optional description
+  type: string;            // Widget type (e.g., "bar_charts")
+  subtype?: string;        // Widget subtype (e.g., "stacked_bar")
+  configs?: Record<string, unknown>;  // Widget-specific configuration
+  createdAt: Date;
+  updatedAt: Date;
+}
+```
+
+### Configuration Object
+
+The `configs` field stores widget-specific settings:
+
+<Tabs>
+  <Tab title="Chart Widgets">
+    ```typescript
+    interface ChartConfig {
+      dataSource: string;       // Connection ID or table name
+      xAxis: string;            // Column for X axis
+      yAxis: string[];          // Columns for Y axis (can be multiple)
+      aggregation?: string;     // "sum", "avg", "count", etc.
+      filters?: Filter[];       // Data filters
+      colors?: string[];        // Custom colors
+      showLegend?: boolean;     // Display legend
+      orientation?: string;     // "vertical" or "horizontal"
+    }
+    ```
+  </Tab>
+
+  <Tab title="Data Table Widgets">
+    ```typescript
+    interface DataTableConfig {
+      dataSource: string;       // Connection ID or table name
+      columns: string[];        // Columns to display
+      filters?: Filter[];       // Row filters
+      sorting?: {
+        column: string;
+        direction: "asc" | "desc";
+      };
+      pagination?: {
+        pageSize: number;
+      };
+    }
+    ```
+  </Tab>
+
+  <Tab title="Text Widgets">
+    ```typescript
+    interface TextConfig {
+      content: string;          // Text content
+      fontSize?: string;        // Font size
+      alignment?: string;       // "left", "center", "right"
+      style?: {
+        bold?: boolean;
+        italic?: boolean;
+        color?: string;
+      };
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Creating Widgets
+
+Widgets are created using Server Actions and automatically added to the project's dashboard.
+
+<Steps>
+  <Step title="Choose Widget Type">
+    Select a widget type and subtype from the available options:
+
+    ```typescript
+    const widgetType = "bar_charts";
+    const widgetSubtype = "stacked_bar";
+    ```
+  </Step>
+
+  <Step title="Configure Widget">
+    Build the configuration object for your widget:
+
+    ```typescript
+    const widgetConfig = {
+      dataSource: connectionId,
+      xAxis: "month",
+      yAxis: ["revenue", "expenses"],
+      aggregation: "sum",
+      showLegend: true,
+      orientation: "vertical"
+    };
+    ```
+  </Step>
+
+  <Step title="Create Widget">
+    Use the `UpsertWidget` Server Action:
+
+    ```typescript
+    import { UpsertWidget } from "@/app/actions/dashboard/crudWidgets";
+
+    const widget = await UpsertWidget({
+      projectId: projectId,
+      title: "Monthly Revenue vs Expenses",
+      description: "Stacked bar chart comparing revenue and expenses by month",
+      type: widgetType,
+      subtype: widgetSubtype,
+      configs: widgetConfig
+    });
+    ```
+  </Step>
+</Steps>
+
+### Widget Creation Process
+
+When you create a widget, VizBoard:
+
+1. **Normalizes** the type and subtype values
+2. **Creates** the widget record in the database
+3. **Adds** the widget ID to the project's `orderedWidgetIds` array
+
+```typescript src/app/actions/dashboard/crudWidgets.ts
+export async function createWidget(data) {
+  // Normalize type and subtype
+  const { type, subtype } = extractWidgetTypeInfo(data);
+  const dataToSave = { ...data, type, subtype };
+  
+  // Create widget
+  const widget = await prisma.widget.create({ data: dataToSave });
+  
+  // Add to project's ordered widget list
+  await prisma.project.update({
+    where: { id: widget.projectId },
+    data: {
+      orderedWidgetIds: {
+        push: widget.id,
+      },
+    },
+  });
+  
+  return widget;
+}
+```
+
+## Updating Widgets
+
+Update existing widgets with new configuration or data:
+
+```typescript
+import { UpsertWidget } from "@/app/actions/dashboard/crudWidgets";
+
+// Update by providing widgetId as second parameter
+const updatedWidget = await UpsertWidget(
+  {
+    title: "Updated Title",
+    description: "New description",
+    configs: {
+      // New configuration
+      xAxis: "quarter",
+      yAxis: ["total_sales"],
+      aggregation: "avg"
+    }
+  },
+  widgetId  // Passing ID triggers update instead of create
+);
+```
+
+<Note>
+  When updating widget configs, the entire `configs` object is replaced, not merged. Include all necessary configuration fields in the update.
+</Note>
+
+### Configuration Updates
+
+The update process replaces the entire configuration:
+
+```typescript src/app/actions/dashboard/crudWidgets.ts
+export async function updateWidget(data, widgetId) {
+  const { type, subtype } = extractWidgetTypeInfo(data);
+  
+  let updateData = { ...data, type, subtype };
+  
+  if (data && typeof data === "object" && "configs" in data) {
+    // Replace configs instead of merging
+    updateData = {
+      ...data,
+      type,
+      subtype,
+      configs: data.configs,  // Complete replacement
+    };
+  }
+  
+  return await prisma.widget.update({
+    where: { id: widgetId },
+    data: updateData,
+  });
+}
+```
+
+## Deleting Widgets
+
+Remove widgets from a project:
+
+```typescript
+import { deleteWidget } from "@/app/actions/dashboard/crudWidgets";
+
+const success = await deleteWidget(widgetId);
+```
+
+### Deletion Process
+
+Widget deletion removes the widget and updates the project's widget order:
+
+```typescript src/app/actions/dashboard/crudWidgets.ts
+export async function deleteWidget(widgetId) {
+  // Get the widget's project ID
+  const widget = await prisma.widget.findUnique({
+    where: { id: widgetId },
+    select: { projectId: true },
+  });
+  
+  if (!widget) throw new Error("Widget not found");
+  
+  // Delete the widget
+  await prisma.widget.delete({
+    where: { id: widgetId },
+  });
+  
+  // Remove from project's orderedWidgetIds array
+  await prisma.project.update({
+    where: { id: widget.projectId },
+    data: {
+      orderedWidgetIds: {
+        set: (await prisma.project.findUnique({
+          where: { id: widget.projectId },
+          select: { orderedWidgetIds: true },
+        }))?.orderedWidgetIds.filter((id) => id !== widgetId) || [],
+      },
+    },
+  });
+  
+  return true;
+}
+```
+
+## Widget Rendering
+
+Widgets are rendered dynamically based on their type and subtype:
+
+```tsx src/components/dashboard/layouts/dashboardLayout.tsx
+{orderedWidgets.map((widget) => {
+  const type = String(widget.type ?? "").toLowerCase();
+  const subtype = typeof widget.subtype === "string" 
+    ? widget.subtype.toLowerCase() 
+    : "";
+
+  // Data tables
+  if (type === "datatables") {
+    if (subtype === "integrated_datatable") {
+      const config = normalizeIntegratedConfig(widget.configs);
+      return (
+        <IntegratedDatatableWidget
+          config={config}
+          widget={widget}
+          key={widget.id}
+        />
+      );
+    }
+    return <DatatableWidget widget={widget} key={widget.id} />;
+  }
+
+  // Charts (area, bar, line, pie)
+  if (["area_charts", "bar_charts", "line_charts", "pie_charts"].includes(type)) {
+    return <ChartWidget widget={widget} key={widget.id} />;
+  }
+
+  // Text blocks
+  if (type === "text_titles") {
+    if (subtype === "section_title") {
+      return <SectionTitle widget={widget} key={widget.id} />;
+    }
+    if (subtype === "text_block") {
+      return <TextBlock widget={widget} key={widget.id} />;
+    }
+  }
+
+  return null;
+})}
+```
+
+## Widget Ordering
+
+Widgets are displayed in the order specified by the project's `orderedWidgetIds` array.
+
+### Default Order
+
+New widgets are appended to the end of the order:
+
+```typescript
+// When creating a widget
+orderedWidgetIds: { push: widget.id }
+```
+
+### Custom Order
+
+Update the display order by reordering the `orderedWidgetIds` array:
+
+```typescript
+import { updateWidgetOrder } from "@/app/actions/dashboard/updateWidgetOrder";
+
+const newOrder = [
+  "widget-id-3",  // Now first
+  "widget-id-1",  // Now second
+  "widget-id-2",  // Now third
+];
+
+const result = await updateWidgetOrder(projectId, newOrder);
+```
+
+See [Dashboards](/features/dashboards) for more details on widget ordering and layout.
+
+## Retrieving Widgets
+
+Get a specific widget by ID:
+
+```typescript
+import { getWidgetById } from "@/app/actions/dashboard/crudWidgets";
+
+const widget = await getWidgetById(widgetId);
+
+if (widget) {
+  console.log(widget.title);
+  console.log(widget.type, widget.subtype);
+  console.log(widget.configs);
+}
+```
+
+### Project Widgets
+
+Widgets are typically retrieved as part of the project data:
+
+```typescript
+const projectData = await getProjectWithConnections(projectId, userId);
+
+// Widgets are ordered according to orderedWidgetIds
+const orderedWidgetIds = projectData.orderedWidgetIds;
+```
+
+## Data Model
+
+Widgets are stored in the Prisma schema:
+
+```prisma prisma/schema.prisma
+model Widget {
+  id          String   @id @default(uuid())
+  projectId   String
+  title       String
+  description String?
+  type        String
+  subtype     String?
+  configs     Json?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("widgets")
+}
+```
+
+## Widget Types Reference
+
+<Accordion title="Data Tables">
+  **Type**: `datatables`
+  
+  **Subtypes**:
+  - `simple_dataTable` - Basic table with sorting and filtering
+  - `integrated_datatable` - Advanced table with aggregations and grouping
+  
+  **Use Cases**:
+  - Display raw data from database tables
+  - Create sortable and filterable data views
+  - Show detailed records with pagination
+</Accordion>
+
+<Accordion title="Area Charts">
+  **Type**: `area_charts`
+  
+  **Subtypes**:
+  - `basic_area` - Standard filled area chart
+  - `linear_area` - Linear interpolation between points
+  - `step_area` - Step-function area chart
+  
+  **Use Cases**:
+  - Visualize cumulative data over time
+  - Show trends with emphasis on volume
+  - Compare multiple data series
+</Accordion>
+
+<Accordion title="Bar Charts">
+  **Type**: `bar_charts`
+  
+  **Subtypes**:
+  - `basic_bar` - Simple vertical bars
+  - `stacked_bar` - Stacked bars for composition
+  - `horizontal_bar` - Horizontal orientation
+  
+  **Use Cases**:
+  - Compare values across categories
+  - Show composition with stacked bars
+  - Display rankings and comparisons
+</Accordion>
+
+<Accordion title="Line Charts">
+  **Type**: `line_charts`
+  
+  **Subtypes**:
+  - `basic_line` - Standard line chart
+  - `linear_line` - Linear interpolation
+  - `step_line` - Step-function line
+  
+  **Use Cases**:
+  - Track changes over time
+  - Show trends and patterns
+  - Compare multiple time series
+</Accordion>
+
+<Accordion title="Pie Charts">
+  **Type**: `pie_charts`
+  
+  **Subtypes**:
+  - `basic_pie` - Standard pie chart
+  - `donut_pie` - Pie chart with center cutout
+  - `stacked_pie` - Multi-level pie chart
+  
+  **Use Cases**:
+  - Show proportions and percentages
+  - Display composition of a whole
+  - Highlight distribution patterns
+</Accordion>
+
+<Accordion title="Text Blocks">
+  **Type**: `text_titles`
+  
+  **Subtypes**:
+  - `section_title` - Large heading for dashboard sections
+  - `text_block` - Formatted text content
+  
+  **Use Cases**:
+  - Add context to dashboards
+  - Organize dashboard sections
+  - Provide descriptions and notes
+</Accordion>
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Descriptive Titles" icon="heading">
+    Use clear, descriptive titles that explain what the widget shows
+  </Card>
+  <Card title="Consistent Colors" icon="palette">
+    Use consistent color schemes across related widgets
+  </Card>
+  <Card title="Appropriate Types" icon="chart-mixed">
+    Choose widget types that match your data and message
+  </Card>
+  <Card title="Performance" icon="gauge-high">
+    Limit data points and use aggregations for large datasets
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="Dashboards" icon="grid" href="/features/dashboards">
+    Organize widgets in dashboards
+  </Card>
+  <Card title="Projects" icon="folder-kanban" href="/features/projects">
+    Manage your projects
+  </Card>
+  <Card title="Database Connections" icon="database" href="/features/database-connections">
+    Configure data sources
+  </Card>
+</CardGroup>

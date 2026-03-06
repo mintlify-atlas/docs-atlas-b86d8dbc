@@ -1,122 +1,120 @@
 {
   "$schema": "https://mintlify.com/docs.json",
-  "theme": "mint",
-  "name": "Mint Starter Kit",
+  "name": "VizBoard",
+  "theme": "palm",
   "colors": {
-    "primary": "#16A34A",
-    "light": "#07C983",
-    "dark": "#15803D"
+    "primary": "#ee6d2d",
+    "light": "#36ab56",
+    "dark": "#73a2f0"
   },
-  "favicon": "/favicon.svg",
+  "favicon": "https://media.brand.dev/06d4abbf-d9be-49f2-84f3-302a147ecc6b.jpg",
+  "logo": {
+    "light": "https://media.brand.dev/06d4abbf-d9be-49f2-84f3-302a147ecc6b.jpg",
+    "dark": "https://media.brand.dev/7f228193-b98a-4a5a-905f-3f3e6c241fd4.svg"
+  },
+  "navbar": {
+    "primary": {
+      "type": "github",
+      "href": "https://github.com/pablonudel/Vizboard"
+    }
+  },
+  "footer": {
+    "socials": {
+      "github": "https://github.com/pablonudel/Vizboard"
+    }
+  },
   "navigation": {
     "tabs": [
       {
-        "tab": "Guides",
+        "tab": "Documentation",
         "groups": [
           {
-            "group": "Getting started",
+            "group": "Get Started",
             "pages": [
-              "index",
-              "quickstart",
-              "development"
+              "introduction",
+              "installation",
+              "quickstart"
             ]
           },
           {
-            "group": "Customization",
+            "group": "Core Features",
             "pages": [
-              "essentials/settings",
-              "essentials/navigation"
+              "features/projects",
+              "features/database-connections",
+              "features/widgets",
+              "features/dashboards"
             ]
           },
           {
-            "group": "Writing content",
+            "group": "Widget Types",
             "pages": [
-              "essentials/markdown",
-              "essentials/code",
-              "essentials/images",
-              "essentials/reusable-snippets"
+              "widgets/datatables",
+              "widgets/charts",
+              "widgets/integrated-datatables",
+              "widgets/text-blocks"
             ]
           },
           {
-            "group": "AI tools",
+            "group": "Guides",
             "pages": [
-              "ai-tools/cursor",
-              "ai-tools/claude-code",
-              "ai-tools/windsurf"
+              "guides/authentication",
+              "guides/connecting-databases",
+              "guides/creating-widgets",
+              "guides/sharing-projects"
             ]
           }
         ]
       },
       {
-        "tab": "API reference",
+        "tab": "Development",
         "groups": [
           {
-            "group": "API documentation",
+            "group": "Overview",
             "pages": [
-              "api-reference/introduction"
+              "development/architecture",
+              "development/tech-stack",
+              "development/project-structure"
             ]
           },
           {
-            "group": "Endpoint examples",
+            "group": "Setup",
             "pages": [
-              "api-reference/endpoint/get",
-              "api-reference/endpoint/create",
-              "api-reference/endpoint/delete",
-              "api-reference/endpoint/webhook"
+              "development/environment-setup",
+              "development/database-setup",
+              "development/docker"
+            ]
+          },
+          {
+            "group": "Security",
+            "pages": [
+              "development/security",
+              "development/encryption"
+            ]
+          }
+        ]
+      },
+      {
+        "tab": "API Reference",
+        "groups": [
+          {
+            "group": "Server Actions",
+            "pages": [
+              "api/actions/auth",
+              "api/actions/projects",
+              "api/actions/connections",
+              "api/actions/widgets"
+            ]
+          },
+          {
+            "group": "API Routes",
+            "pages": [
+              "api/routes/projects",
+              "api/routes/widgets",
+              "api/routes/dashboard"
             ]
           }
         ]
       }
-    ],
-    "global": {
-      "anchors": [
-        {
-          "anchor": "Documentation",
-          "href": "https://mintlify.com/docs",
-          "icon": "book-open-cover"
-        },
-        {
-          "anchor": "Blog",
-          "href": "https://mintlify.com/blog",
-          "icon": "newspaper"
-        }
-      ]
-    }
-  },
-  "logo": {
-    "light": "/logo/light.svg",
-    "dark": "/logo/dark.svg"
-  },
-  "navbar": {
-    "links": [
-      {
-        "label": "Support",
-        "href": "mailto:hi@mintlify.com"
-      }
-    ],
-    "primary": {
-      "type": "button",
-      "label": "Dashboard",
-      "href": "https://dashboard.mintlify.com"
-    }
-  },
-  "contextual": {
-    "options": [
-     "copy",
-     "view",
-     "chatgpt",
-     "claude",
-     "perplexity",
-     "mcp",
-     "cursor",
-     "vscode"
-   ]
-  },
-  "footer": {
-    "socials": {
-      "x": "https://x.com/mintlify",
-      "github": "https://github.com/mintlify",
-      "linkedin": "https://linkedin.com/company/mintlify"
-    }
+    ]
   }
 }

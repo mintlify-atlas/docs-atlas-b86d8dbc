@@ -1,0 +1,566 @@
+---
+title: 'Dashboard Builder'
+description: 'Create interactive dashboards with drag-and-drop widgets and customizable layouts'
+icon: 'grid'
+---
+
+## Overview
+
+Dashboards in VizBoard are collections of widgets organized in a customizable grid layout. Each project has a dashboard where you can add, arrange, and configure widgets to visualize your data. Dashboards support drag-and-drop reordering and responsive layouts.
+
+## Dashboard Structure
+
+Every dashboard is associated with a project and contains:
+
+<CardGroup cols={2}>
+  <Card title="Widgets" icon="chart-mixed">
+    Data visualizations and content elements
+  </Card>
+  <Card title="Layout Order" icon="arrows-up-down">
+    Customizable widget arrangement
+  </Card>
+  <Card title="Project Context" icon="folder">
+    Project title and description
+  </Card>
+  <Card title="Navigation" icon="sidebar">
+    Sidebar for adding and managing widgets
+  </Card>
+</CardGroup>
+
+## Creating a Dashboard
+
+Dashboards are automatically created when you create a project. The dashboard starts empty and you add widgets to build your visualization.
+
+<Steps>
+  <Step title="Navigate to Project Dashboard">
+    Access your project's dashboard:
+
+    ```typescript
+    // Dashboard URL format
+    /projects/{projectId}/dashboard
+    ```
+
+    For public projects, a public URL is also available:
+
+    ```typescript
+    // Public dashboard URL format
+    /public/{idPublic}
+    ```
+  </Step>
+
+  <Step title="Add Widgets">
+    Click the sidebar to browse available widget types:
+
+    ```tsx src/components/dashboard/navigation/addWidget.tsx
+    export function AddWidget({ onItemClick }) {
+      return (
+        <SidebarMenu>
+          {widgets.map((widget, index) => {
+            const Icon = widget.icon;
+            return (
+              <Collapsible key={index}>
+                <CollapsibleTrigger>
+                  <SidebarMenuButton>
+                    <Icon className="mr-2 h-4 w-4" />
+                    <span>{t(widget.type)}</span>
+                  </SidebarMenuButton>
+                </CollapsibleTrigger>
+                <CollapsibleContent>
+                  {widget.subtypes.map((subtype) => (
+                    <SidebarMenuButton
+                      onClick={() => {
+                        const normalized = extractWidgetTypeInfo({
+                          type: widget.type,
+                          subtype,
+                        });
+                        onItemClick(normalized.type, normalized.subtype);
+                      }}
+                    >
+                      {t(subtype)}
+                    </SidebarMenuButton>
+                  ))}
+                </CollapsibleContent>
+              </Collapsible>
+            );
+          })}
+        </SidebarMenu>
+      );
+    }
+    ```
+  </Step>
+
+  <Step title="Configure Widgets">
+    Configure each widget with data sources, columns, and visualization options using the configuration dialog.
+  </Step>
+
+  <Step title="Arrange Layout">
+    Reorder widgets using drag-and-drop or the widget order controls.
+  </Step>
+</Steps>
+
+## Dashboard Layout
+
+Dashboards use a responsive grid layout that adapts to screen sizes:
+
+```tsx src/components/dashboard/layouts/dashboardLayout.tsx
+<div
+  className="grid grid-cols-2 gap-4 md:gap-8 p-4 md:p-8 overflow-x-auto"
+  style={{ WebkitOverflowScrolling: "touch" }}
+>
+  {orderedWidgets.map((widget) => {
+    // Render widget based on type
+    return renderWidget(widget);
+  })}
+</div>
+```
+
+### Layout Features
+
+<Tabs>
+  <Tab title="Grid Layout">
+    Widgets are arranged in a 2-column grid:
+
+    ```css
+    grid-cols-2        /* 2 columns on all screens */
+    gap-4 md:gap-8     /* Responsive gap spacing */
+    p-4 md:p-8         /* Responsive padding */
+    ```
+
+    The grid automatically adjusts for:
+    - Desktop: 2 columns with larger gaps
+    - Mobile: 2 columns with smaller gaps
+    - Overflow: Horizontal scroll for wide content
+  </Tab>
+
+  <Tab title="Widget Order">
+    Widgets are rendered according to the project's `orderedWidgetIds`:
+
+    ```typescript
+    const orderedWidgets = useMemo(() => {
+      if (!orderedWidgetIds || orderedWidgetIds.length === 0) {
+        return widgets;  // Default order
+      }
+      
+      const widgetMap = Object.fromEntries(
+        widgets.map((w) => [w.id, w])
+      );
+      
+      return orderedWidgetIds
+        .map((id) => widgetMap[id])
+        .filter(Boolean);
+    }, [widgets, orderedWidgetIds]);
+    ```
+  </Tab>
+
+  <Tab title="Responsive Design">
+    The layout adapts to different screen sizes:
+
+    ```typescript
+    // Mobile: Compact spacing
+    className="gap-4 p-4"
+    
+    // Desktop: Generous spacing
+    className="md:gap-8 md:p-8"
+    
+    // Overflow handling
+    style={{ WebkitOverflowScrolling: "touch" }}
+    ```
+  </Tab>
+</Tabs>
+
+## Widget Ordering
+
+Customize the display order of widgets on your dashboard.
+
+### Update Widget Order
+
+Change the order by updating the `orderedWidgetIds` array:
+
+```typescript
+import { updateWidgetOrder } from "@/app/actions/dashboard/updateWidgetOrder";
+
+const newOrder = [
+  "widget-id-3",  // First widget
+  "widget-id-1",  // Second widget
+  "widget-id-2",  // Third widget
+];
+
+const result = await updateWidgetOrder(projectId, newOrder);
+
+if (result.success) {
+  console.log("Widget order updated");
+} else {
+  console.error("Failed to update order:", result.error);
+}
+```
+
+### Server Action Implementation
+
+The widget order is stored as an array in the project:
+
+```typescript src/app/actions/dashboard/updateWidgetOrder.ts
+export async function updateWidgetOrder(
+  projectId: string,
+  newOrder: string[]
+) {
+  try {
+    await prisma.project.update({
+      where: { id: projectId },
+      data: {
+        orderedWidgetIds: { set: newOrder },
+      },
+    });
+    return { success: true };
+  } catch (error) {
+    console.error("Error updating widget order:", error);
+    return { success: false, error: "Failed to update widget order" };
+  }
+}
+```
+
+<Note>
+  The `orderedWidgetIds` array contains widget IDs in the order they should be displayed. Widgets not in the array are appended at the end in their creation order.
+</Note>
+
+## Dashboard Header
+
+The dashboard header provides navigation and project context:
+
+```tsx
+<header className="flex h-20 shrink-0 items-center gap-2 transition-[width,height] border-b">
+  <div className="flex items-center justify-between w-full gap-2 px-4 md:px-8">
+    <div className="flex items-center gap-4">
+      <SidebarTrigger />  {/* Toggle widget sidebar */}
+    </div>
+    <UserMenu user={user} />  {/* User menu */}
+  </div>
+</header>
+```
+
+### Project Title and Description
+
+The dashboard displays the project title prominently:
+
+<Tabs>
+  <Tab title="With Description">
+    ```tsx
+    <Accordion type="single" collapsible className="w-full">
+      <AccordionItem value="description">
+        <AccordionTrigger className="text-3xl px-4 md:px-8">
+          <h1>{projectData.title}</h1>
+        </AccordionTrigger>
+        <AccordionContent className="text-muted-foreground px-4 md:px-8">
+          <p>{projectData.description}</p>
+        </AccordionContent>
+      </AccordionItem>
+    </Accordion>
+    ```
+
+    The description is collapsible to save space.
+  </Tab>
+
+  <Tab title="Without Description">
+    ```tsx
+    <h1 className="text-3xl px-4 md:px-8">
+      {projectData.title}
+    </h1>
+    ```
+
+    If no description exists, only the title is shown.
+  </Tab>
+</Tabs>
+
+## Widget Configuration Dialog
+
+The configuration dialog allows you to edit widget settings:
+
+```tsx
+<ConfigDialog projectId={projectData.id} />
+```
+
+The dialog provides:
+- Data source selection
+- Column/axis configuration
+- Visualization options
+- Filtering and aggregation settings
+
+See [Widgets](/features/widgets) for detailed widget configuration options.
+
+## Empty State
+
+When a dashboard has no widgets, a helpful empty state is displayed:
+
+```tsx
+{showNoWidgets ? (
+  <div className="h-full col-span-full flex flex-col items-center justify-center p-8 text-center text-muted-foreground">
+    <Grid2x2Plus className="h-12 w-12 mb-4" />
+    <h3 className="text-xl font-semibold mb-2">
+      {t("dashboard_no_widgets_title", { project: projectData.title })}
+      <br />
+      {t("dashboard_no_widgets_subtitle")}
+    </h3>
+  </div>
+) : (
+  // Render widgets
+)}
+```
+
+## Public Dashboards
+
+Public dashboards allow sharing your visualizations without authentication.
+
+### Enable Public Access
+
+```typescript
+import { updateProject } from "@/app/actions/project";
+
+const result = await updateProject({
+  id: projectId,
+  isPublic: true,  // Enable public access
+});
+
+if (result.success) {
+  // Project.idPublic is auto-generated
+  console.log("Public URL: /public/" + project.idPublic);
+}
+```
+
+<Note type="warning">
+  Projects can only be made public if they have at least one valid database connection. Public access is automatically disabled if all connections become invalid.
+</Note>
+
+### Public vs Private Layout
+
+Public dashboards use a simplified layout:
+
+<Tabs>
+  <Tab title="Private Dashboard">
+    ```typescript
+    // Full functionality for project owner
+    - Widget editing and configuration
+    - Add/remove widgets
+    - Reorder widgets
+    - Project settings access
+    - Full sidebar navigation
+    ```
+  </Tab>
+
+  <Tab title="Public Dashboard">
+    ```typescript
+    // Read-only view for public access
+    - View widgets only
+    - No editing capabilities
+    - No sidebar navigation
+    - Simplified header
+    - No user menu
+    ```
+
+    Public dashboards use `PublicDashboardLayout` component.
+  </Tab>
+</Tabs>
+
+## Loading States
+
+Dashboards display appropriate loading states:
+
+```tsx
+if (!projectData) {
+  return <Loading text={t("dashboard_loading_project_data")} />;
+}
+
+if (isLoading && !useWidgetsStore.getState().hasLoadedOnce) {
+  return <Loading text={t("dashboard_loading_widgets")} />;
+}
+
+if (error) {
+  return (
+    <div className="h-full col-span-full flex flex-col items-center justify-center">
+      <Grid2x2X className="h-12 w-12 mb-4" />
+      <h3 className="text-xl font-semibold mb-2">
+        {t("dashboard_error_loading_widgets")}
+      </h3>
+    </div>
+  );
+}
+```
+
+## Widget State Management
+
+Dashboards use Zustand for widget state management:
+
+```typescript
+const { widgets, orderedWidgetIds, fetchWidgets, isLoading, error } =
+  useWidgetsStore();
+
+const { resetWidgets } = useWidgetsStore();
+
+useEffect(() => {
+  if (projectData?.id) {
+    resetWidgets();  // Clear previous state
+    fetchWidgets(projectData.id);  // Fetch widgets for current project
+  }
+}, [projectData?.id]);
+```
+
+### State Structure
+
+```typescript
+interface WidgetsStore {
+  widgets: Widget[];           // All widgets for current project
+  orderedWidgetIds: string[];  // Display order
+  isLoading: boolean;          // Loading state
+  error: string | null;        // Error message
+  hasLoadedOnce: boolean;      // Has loaded at least once
+  fetchWidgets: (projectId: string) => Promise<void>;
+  resetWidgets: () => void;    // Clear state
+}
+```
+
+## Dashboard Organization
+
+Best practices for organizing your dashboards:
+
+<Steps>
+  <Step title="Use Section Titles">
+    Add `section_title` text widgets to divide your dashboard into logical sections:
+
+    ```typescript
+    await UpsertWidget({
+      projectId: projectId,
+      title: "Sales Metrics",
+      type: "text_titles",
+      subtype: "section_title",
+      configs: {
+        content: "Sales Metrics",
+        fontSize: "large"
+      }
+    });
+    ```
+  </Step>
+
+  <Step title="Group Related Widgets">
+    Place related visualizations near each other by managing widget order:
+
+    ```typescript
+    const order = [
+      "section-title-sales",
+      "widget-revenue-chart",
+      "widget-sales-table",
+      "section-title-expenses",
+      "widget-expenses-chart",
+      "widget-expenses-table"
+    ];
+    
+    await updateWidgetOrder(projectId, order);
+    ```
+  </Step>
+
+  <Step title="Add Context">
+    Use `text_block` widgets to provide descriptions and context:
+
+    ```typescript
+    await UpsertWidget({
+      projectId: projectId,
+      title: "About This Dashboard",
+      type: "text_titles",
+      subtype: "text_block",
+      configs: {
+        content: "This dashboard shows quarterly sales performance..."
+      }
+    });
+    ```
+  </Step>
+</Steps>
+
+## Performance Optimization
+
+Optimize dashboard performance for large datasets:
+
+<CardGroup cols={2}>
+  <Card title="Lazy Loading" icon="clock">
+    Widgets are loaded progressively as the dashboard renders
+  </Card>
+  <Card title="Data Aggregation" icon="table">
+    Use aggregations in widget configs to reduce data transfer
+  </Card>
+  <Card title="Pagination" icon="arrows-left-right">
+    Enable pagination for data table widgets
+  </Card>
+  <Card title="Caching" icon="database">
+    Schemas are cached to avoid repeated introspection
+  </Card>
+</CardGroup>
+
+## Keyboard Shortcuts
+
+Use keyboard shortcuts for faster dashboard navigation:
+
+| Shortcut | Action |
+|----------|--------|
+| `Ctrl/Cmd + K` | Open command palette |
+| `Ctrl/Cmd + \` | Toggle sidebar |
+| `Escape` | Close dialogs |
+| `Tab` | Navigate between widgets |
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Logical Flow" icon="arrow-down">
+    Arrange widgets in a logical reading order (top to bottom, left to right)
+  </Card>
+  <Card title="Consistent Styling" icon="palette">
+    Use consistent colors and chart types across related widgets
+  </Card>
+  <Card title="Clear Titles" icon="heading">
+    Give widgets descriptive titles that explain what they show
+  </Card>
+  <Card title="Test Public View" icon="eye">
+    Review public dashboards to ensure they work as expected
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+<Accordion title="Widgets Not Loading">
+  **Symptoms**: Dashboard shows loading state indefinitely
+  
+  **Solutions**:
+  - Check browser console for errors
+  - Verify project has valid database connections
+  - Ensure widgets have valid configurations
+  - Clear browser cache and reload
+</Accordion>
+
+<Accordion title="Widget Order Not Updating">
+  **Symptoms**: Widgets don't reorder after calling `updateWidgetOrder`
+  
+  **Solutions**:
+  - Verify `orderedWidgetIds` contains all widget IDs
+  - Check that widget IDs are valid
+  - Refresh the dashboard page
+  - Verify no client-side caching issues
+</Accordion>
+
+<Accordion title="Public Dashboard Not Accessible">
+  **Symptoms**: Public URL shows "not found" error
+  
+  **Solutions**:
+  - Verify project `isPublic: true`
+  - Check that project has at least one valid connection
+  - Confirm `idPublic` field is set
+  - Verify no typos in the public URL
+</Accordion>
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="Widgets" icon="chart-mixed" href="/features/widgets">
+    Learn about widget types
+  </Card>
+  <Card title="Projects" icon="folder-kanban" href="/features/projects">
+    Manage projects
+  </Card>
+  <Card title="Database Connections" icon="database" href="/features/database-connections">
+    Configure data sources
+  </Card>
+</CardGroup>

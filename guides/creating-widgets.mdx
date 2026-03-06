@@ -1,0 +1,589 @@
+---
+title: 'Creating Widgets'
+description: 'How to create and configure different widget types for data visualization'
+icon: 'chart-line'
+---
+
+Widgets are the building blocks of VizBoard dashboards. Each widget visualizes data from your connected databases in different formats.
+
+## Available Widget Types
+
+VizBoard supports multiple widget types for different visualization needs:
+
+<CardGroup cols={2}>
+  <Card title="Chart Widgets" icon="chart-bar">
+    Bar, line, and area charts for visualizing trends and comparisons
+  </Card>
+  
+  <Card title="Data Table Widgets" icon="table">
+    Interactive tables with sorting, filtering, and pagination
+  </Card>
+  
+  <Card title="Text Widgets" icon="text">
+    Section titles and text blocks for dashboard organization
+  </Card>
+  
+  <Card title="Integrated Tables" icon="table-cells">
+    Advanced tables with complex data relationships
+  </Card>
+</CardGroup>
+
+## Widget Data Model
+
+All widgets share a common data structure:
+
+```prisma
+model Widget {
+  id          String   @id @default(uuid())
+  projectId   String
+  title       String
+  description String?
+  type        String   // "chart", "datatable", "text", etc.
+  subtype     String?  // "bar", "line", "area" for charts
+  configs     Json?    // Widget-specific configuration
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  project     Project  @relation(...)
+}
+```
+
+<Note>
+  Widget order is managed at the project level via the `orderedWidgetIds` array in the Project model.
+</Note>
+
+## Creating a Chart Widget
+
+Chart widgets visualize data from database tables as bar charts, line charts, or area charts.
+
+<Steps>
+  <Step title="Add Widget to Dashboard">
+    From your project dashboard, click "Add Widget" or the "+" button.
+  </Step>
+  
+  <Step title="Select Chart Type">
+    Choose from:
+    - **Bar Chart** - Compare values across categories
+    - **Line Chart** - Show trends over time
+    - **Area Chart** - Visualize cumulative data
+  </Step>
+  
+  <Step title="Configure Data Source">
+    
+    Select your data source:
+    
+    <ParamField path="connectionId" type="string" required>
+      The database connection to use (if you have multiple connections)
+    </ParamField>
+    
+    <ParamField path="tableName" type="string" required>
+      The table containing your data
+    </ParamField>
+  </Step>
+  
+  <Step title="Configure Axes">
+    
+    Define what to plot:
+    
+    <ParamField path="xAxisColumn" type="string" required>
+      Column for X-axis (typically a category or time column)
+    </ParamField>
+    
+    <ParamField path="yAxisColumns" type="array" required>
+      One or more columns for Y-axis (numeric values to plot)
+    </ParamField>
+    
+    Multiple Y-axis columns will be displayed as separate series on the same chart.
+  </Step>
+  
+  <Step title="Add Title and Description">
+    
+    <ParamField path="title" type="string" required>
+      Widget title displayed in the dashboard
+    </ParamField>
+    
+    <ParamField path="description" type="string">
+      Optional description shown in a hover tooltip
+    </ParamField>
+  </Step>
+  
+  <Step title="Save Widget">
+    Click "Create" to add the widget to your dashboard. The widget ID is automatically added to the project's `orderedWidgetIds` array.
+  </Step>
+</Steps>
+
+### Chart Configuration Example
+
+```json
+{
+  "title": "Monthly Sales by Region",
+  "description": "Total sales grouped by region for each month",
+  "type": "chart",
+  "subtype": "bar",
+  "configs": {
+    "connectionId": "conn-123",
+    "tableName": "sales",
+    "chartType": "bar",
+    "xAxisColumn": "month",
+    "yAxisColumns": ["north_region", "south_region", "west_region"],
+    "expanded": false
+  }
+}
+```
+
+### Chart Widget Implementation
+
+The chart widget fetches data and renders based on configuration (`src/components/dashboard/widgets/charts/chartWidget.tsx:31-288`):
+
+```typescript
+export function ChartWidget({ widget }: { widget: AppWidget }) {
+  const configs = widget.configs as ChartWidgetConfigs
+  
+  const tableName = configs?.tableName || ""
+  const connectionId = configs?.connectionId
+  const xAxisColumn = configs?.xAxisColumn || ""
+  const yAxisColumns = configs?.yAxisColumns || []
+  const chartType = (configs?.chartType || "bar").toLowerCase()
+  
+  // Fetch data from database
+  const { data, loading, error } = useTableDataWithSchema({
+    projectId,
+    tableName,
+    connectionId,
+  })
+  
+  // Transform data for chart
+  const chartData = transformToChartData(data, configs)
+  
+  // Render appropriate chart type
+  return (
+    <Card>
+      {chartType === "bar" && <BarChartWidget data={chartData} />}
+      {chartType === "line" && <LineChartWidget data={chartData} />}
+      {chartType === "area" && <AreaChartWidget data={chartData} />}
+    </Card>
+  )
+}
+```
+
+### Expanding Charts
+
+Charts can be expanded to take up more horizontal space:
+
+- **Normal Width**: 1 column on desktop (col-span-1)
+- **Expanded Width**: 2 columns on desktop (col-span-2)
+
+Toggle expansion using the chevron button in the widget header. The `expanded` state is persisted in the widget's `configs`.
+
+## Creating a Data Table Widget
+
+Data table widgets display database records in an interactive table format.
+
+<Steps>
+  <Step title="Add Data Table Widget">
+    Click "Add Widget" and select "Data Table".
+  </Step>
+  
+  <Step title="Configure Connection">
+    
+    <ParamField path="connectionId" type="string" required>
+      Database connection to query
+    </ParamField>
+  </Step>
+  
+  <Step title="Select Tables">
+    
+    <ParamField path="tables" type="array" required>
+      List of table names to make available in the widget dropdown
+    </ParamField>
+    
+    Users can switch between tables using a dropdown in the widget header.
+  </Step>
+  
+  <Step title="Configure Widget">
+    
+    <ParamField path="title" type="string" required>
+      Widget title
+    </ParamField>
+    
+    <ParamField path="description" type="string">
+      Optional description
+    </ParamField>
+  </Step>
+  
+  <Step title="Save Widget">
+    The data table widget is created and added to your dashboard.
+  </Step>
+</Steps>
+
+### Data Table Configuration Example
+
+```json
+{
+  "title": "User Management",
+  "description": "View and search all users in the system",
+  "type": "datatable",
+  "configs": {
+    "connectionId": "conn-123",
+    "tables": ["users", "user_profiles", "user_sessions"]
+  }
+}
+```
+
+### Data Table Features
+
+Data table widgets include:
+
+- **Column Sorting**: Click column headers to sort
+- **Filtering**: Filter by column values with type-aware filters
+- **Search**: Global search across all columns
+- **Pagination**: Navigate large datasets efficiently
+- **Table Switching**: Dropdown to switch between configured tables
+
+### Data Table Implementation
+
+From `src/components/dashboard/widgets/datatable/datatableWidget.tsx:33-275`:
+
+```typescript
+function DatatableWidget({ widget }: { widget: AppWidget }) {
+  const configs = widget.configs as DatatableConfig
+  const tables = configs?.tables || []
+  const connectionId = configs?.connectionId
+  
+  // Track selected table in localStorage
+  const [selectedTable, setSelectedTable] = useState(
+    tables[0] || ""
+  )
+  
+  // Fetch data for selected table
+  const { data, loading, error, fullSchema } = useTableDataWithSchema({
+    projectId,
+    tableName: selectedTable,
+    connectionId,
+  })
+  
+  // Generate columns from schema
+  const columns = useMemo(
+    () => getTableColumnsFromSchema(fullSchema, selectedTable),
+    [fullSchema, selectedTable]
+  )
+  
+  return (
+    <Card>
+      <Select value={selectedTable} onValueChange={setSelectedTable}>
+        {tables.map((table) => (
+          <SelectItem value={table}>{table}</SelectItem>
+        ))}
+      </Select>
+      
+      <DataTable columns={columns} data={data} />
+    </Card>
+  )
+}
+```
+
+### Column Type Detection
+
+The data table automatically detects column types from the database schema and applies appropriate:
+
+- **Text Filters**: For string columns
+- **Number Filters**: For numeric columns (range, equals, greater than, etc.)
+- **Date Filters**: For date/timestamp columns
+- **Boolean Filters**: For boolean columns
+- **Array Filters**: For array columns
+
+## Creating Text Widgets
+
+Text widgets add structure and context to your dashboards without querying data.
+
+### Section Title Widget
+
+Adds a prominent heading to group related widgets:
+
+```json
+{
+  "title": "Sales Analytics",
+  "type": "text",
+  "subtype": "section_title",
+  "configs": {}
+}
+```
+
+### Text Block Widget
+
+Adds descriptive text, markdown content, or notes:
+
+```json
+{
+  "title": "Dashboard Notes",
+  "description": "This dashboard shows real-time sales metrics updated every 5 minutes.",
+  "type": "text",
+  "subtype": "text_block",
+  "configs": {
+    "content": "**Important**: Data is cached for 5 minutes."
+  }
+}
+```
+
+## Widget CRUD Operations
+
+All widget operations go through the CRUD functions in `src/app/actions/dashboard/crudWidgets.ts`.
+
+### Creating a Widget
+
+```typescript
+export async function createWidget(
+  data: Prisma.WidgetCreateInput
+) {
+  // Create widget
+  const widget = await prisma.widget.create({ data })
+  
+  // Add to project's ordered widget list
+  await prisma.project.update({
+    where: { id: widget.projectId },
+    data: {
+      orderedWidgetIds: { push: widget.id },
+    },
+  })
+  
+  return widget
+}
+```
+
+### Updating a Widget
+
+```typescript
+export async function updateWidget(
+  data: Prisma.WidgetUpdateInput,
+  widgetId: string
+) {
+  return await prisma.widget.update({
+    where: { id: widgetId },
+    data,
+  })
+}
+```
+
+### Deleting a Widget
+
+```typescript
+export async function deleteWidget(widgetId: string) {
+  const widget = await prisma.widget.findUnique({
+    where: { id: widgetId },
+  })
+  
+  // Delete widget
+  await prisma.widget.delete({ where: { id: widgetId } })
+  
+  // Remove from project's ordered list
+  await prisma.project.update({
+    where: { id: widget.projectId },
+    data: {
+      orderedWidgetIds: {
+        set: orderedWidgetIds.filter((id) => id !== widgetId),
+      },
+    },
+  })
+}
+```
+
+### Upserting a Widget
+
+The `UpsertWidget` function handles both create and update:
+
+```typescript
+export async function UpsertWidget(data: unknown, widgetId?: string) {
+  if (widgetId) {
+    return await updateWidget(data, widgetId)
+  } else {
+    return await createWidget(data)
+  }
+}
+```
+
+## Widget Ordering
+
+Widget display order is controlled by the `orderedWidgetIds` array in the Project model.
+
+### Reordering Widgets
+
+Users can drag and drop widgets to reorder them. The new order is saved via:
+
+```typescript
+await prisma.project.update({
+  where: { id: projectId },
+  data: {
+    orderedWidgetIds: newOrderArray,
+  },
+})
+```
+
+### Default Order
+
+If `orderedWidgetIds` is empty or missing widget IDs, widgets are displayed in creation order (`createdAt` ascending).
+
+## Widget Settings Menu
+
+All widgets include a settings menu with common actions (`src/components/dashboard/widgets/shared/widgetSettingsMenu.tsx`):
+
+- **Edit**: Open widget configuration dialog
+- **Refresh**: Manually refresh widget data
+- **Delete**: Remove widget from dashboard
+- **Duplicate**: Create a copy of the widget (if supported)
+
+## Real-Time Data Updates
+
+Widgets fetch data on mount and can be refreshed:
+
+### Automatic Refresh
+
+Widgets use SWR for data fetching with automatic revalidation:
+
+```typescript
+const { data, error, mutate } = useSWR(
+  `/api/projects/${projectId}/table/${tableName}`,
+  fetcher,
+  {
+    revalidateOnFocus: true,
+    revalidateOnReconnect: true,
+  }
+)
+```
+
+### Manual Refresh
+
+Click the refresh icon in the widget settings menu to manually reload data.
+
+## Widget Error States
+
+Widgets display different error states based on the situation:
+
+<CardGroup cols={2}>
+  <Card title="Configuration Incomplete" icon="wrench">
+    Required configuration fields are missing (e.g., no table selected)
+  </Card>
+  
+  <Card title="Offline" icon="wifi-slash">
+    No internet connection detected
+  </Card>
+  
+  <Card title="Loading" icon="spinner">
+    Data is being fetched from the database
+  </Card>
+  
+  <Card title="Error" icon="triangle-exclamation">
+    Failed to fetch data (connection error, query error, etc.)
+  </Card>
+  
+  <Card title="No Data" icon="database">
+    Query successful but returned zero rows
+  </Card>
+</CardGroup>
+
+### Error State Implementation
+
+From the chart widget (`src/components/dashboard/widgets/charts/chartWidget.tsx:194-283`):
+
+```typescript
+{!isOnline && (
+  <WidgetError
+    type="offline"
+    title={t("connection_lost")}
+    description={t("check_internet_connection")}
+  />
+)}
+
+{isOnline && loading && (
+  <WidgetError
+    type="loading"
+    title={t("loading_table_data")}
+    description={t("please_wait_while_loading")}
+  />
+)}
+
+{isOnline && error && (
+  <WidgetError
+    type="error"
+    title={t("unable_to_load_data")}
+    description={t("data_fetch_failed_check_connection")}
+  />
+)}
+```
+
+## Public Dashboard Widgets
+
+When a project is made public, all widgets are visible to anyone with the public link.
+
+### Read-Only Mode
+
+Public dashboards are read-only:
+- No widget settings menu
+- No edit/delete options
+- No expand/collapse for charts
+- Data refreshes automatically but cannot be triggered manually
+
+### Public Widget Detection
+
+```typescript
+const isPublicDashboard =
+  projectData?.isPublic && pathname?.startsWith("/public/")
+
+if (!isPublicDashboard) {
+  return <WidgetSettingsMenu widget={widget} />
+}
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Meaningful Titles" icon="heading">
+    Use clear, descriptive titles that explain what the widget shows
+  </Card>
+  
+  <Card title="Add Descriptions" icon="circle-info">
+    Include descriptions for complex widgets to help users understand the data
+  </Card>
+  
+  <Card title="Group Related Widgets" icon="layer-group">
+    Use text widgets to create sections and organize your dashboard
+  </Card>
+  
+  <Card title="Choose Appropriate Charts" icon="chart-mixed">
+    Use bar charts for comparisons, line charts for trends, tables for detailed data
+  </Card>
+  
+  <Card title="Limit Y-Axis Series" icon="chart-line">
+    Keep chart series to 3-5 max for readability
+  </Card>
+  
+  <Card title="Test with Real Data" icon="vial">
+    Preview widgets with actual database data before finalizing
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+### Widget Shows "Configuration Incomplete"
+
+- Verify all required fields are filled (connection, table, columns)
+- Check that the table name exists in the database
+- Ensure the connection is valid
+
+### Widget Shows "No Data Available"
+
+- Confirm the table contains rows
+- Check if filters are too restrictive
+- Verify the selected columns exist
+
+### Widget Fails to Load
+
+- Check browser console for errors
+- Verify database connection is valid
+- Ensure schema introspection completed successfully
+- Try regenerating the project schema
+
+### Chart Displays Incorrectly
+
+- Verify X-axis column contains unique values
+- Ensure Y-axis columns contain numeric data
+- Check for null values in the data
+- Try a different chart type

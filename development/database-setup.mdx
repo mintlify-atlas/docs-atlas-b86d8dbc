@@ -1,0 +1,403 @@
+---
+title: Database Setup
+description: Initialize the VizBoard database schema with Prisma migrations and populate test databases with sample data
+---
+
+This guide covers setting up the main VizBoard database using Prisma ORM and populating test databases with sample data for widget development.
+
+## Prerequisites
+
+<Note>
+Before proceeding, ensure you have:
+- [Docker and Docker Compose installed](/development/docker)
+- [Environment variables configured](/development/environment-setup)
+- PostgreSQL databases running (via `docker-compose up -d`)
+</Note>
+
+## Database Schema Overview
+
+VizBoard uses **Prisma ORM** to manage the main application database (`vizboard_main`). The schema includes the following models:
+
+### Core Models
+
+| Model | Description |
+|-------|-------------|
+| **User** | User accounts with authentication information |
+| **Account** | OAuth provider accounts (for NextAuth.js) |
+| **Project** | User projects containing dashboards and widgets |
+| **DbConnection** | External database connections with encrypted credentials |
+| **Widget** | Dashboard widgets (tables, charts) with configuration |
+
+### Schema Highlights
+
+<CodeGroup>
+
+```prisma Key Models
+model User {
+  id            String    @id @default(uuid())
+  firstName     String?
+  lastName      String?
+  email         String    @unique
+  password      String?
+  name          String
+  emailVerified DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+  image         String?
+  accounts      Account[]
+  projects      Project[]
+}
+
+model Project {
+  id                  String         @id @default(uuid())
+  userId              String
+  title               String
+  description         String?
+  isPublic            Boolean        @default(false)
+  idPublic            String?        @unique
+  orderedWidgetIds    String[]
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  lastIntrospectionAt DateTime?
+  user                User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  dbconnections       DbConnection[]
+  widgets             Widget[]
+}
+
+model DbConnection {
+  id                  String    @id @default(uuid())
+  projectId           String
+  title               String
+  dbAccess            Json      // Encrypted credentials
+  dbSchema            Json?     // Introspected schema
+  isValid             Boolean?
+  validationError     String?
+  lastIntrospectionAt DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  project             Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+
+model Widget {
+  id          String   @id @default(uuid())
+  projectId   String
+  title       String
+  description String?
+  type        String   // 'table', 'chart'
+  subtype     String?  // 'bar', 'line', 'area'
+  configs     Json?    // Widget-specific configuration
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  project     Project  @relation(fields: [projectId], references: [id], onDelete: Cascade)
+}
+```
+
+</CodeGroup>
+
+## Prisma Migrations
+
+<Steps>
+
+<Step title="Install Dependencies">
+
+Ensure all Node.js dependencies are installed:
+
+```bash
+npm install
+```
+
+This installs Prisma CLI and the Prisma Client.
+
+</Step>
+
+<Step title="Run Migrations">
+
+Apply all pending migrations to create the database schema:
+
+```bash
+npm run db:migrate
+```
+
+This command:
+- Applies all migrations in `prisma/migrations/`
+- Generates the Prisma Client
+- Creates all tables, indexes, and constraints
+
+<Note>
+During development, Prisma will prompt you to name new migrations. This is normal and helps track schema changes.
+</Note>
+
+</Step>
+
+<Step title="Verify Schema Creation">
+
+Confirm your database schema is correct using Prisma Studio:
+
+```bash
+npm run db:studio
+```
+
+This opens a web interface at **http://localhost:5555** where you can:
+- Browse all database tables
+- View and edit records
+- Verify relationships between models
+
+</Step>
+
+</Steps>
+
+### Migration Commands Reference
+
+| Command | Description |
+|---------|-------------|
+| `npm run db:migrate` | Apply pending migrations to the database |
+| `npm run db:reset` | Reset database, delete all data, and reapply migrations |
+| `npm run db:studio` | Open Prisma Studio for database exploration |
+| `npx prisma migrate dev --name <name>` | Create a new migration (after schema changes) |
+| `npx prisma generate` | Regenerate Prisma Client (after schema changes) |
+
+<Warning>
+**Production Migrations**: Use `npx prisma migrate deploy` in production environments instead of `migrate dev`. This command applies migrations without prompting for input.
+</Warning>
+
+## Reset Database
+
+If you need to start fresh:
+
+```bash
+npm run db:reset
+```
+
+This command:
+1. Drops all tables
+2. Deletes migration history
+3. Reapplies all migrations from scratch
+4. Runs the seed script (if configured)
+
+<Warning>
+**Data Loss**: This command permanently deletes all data in the database. Only use in development.
+</Warning>
+
+## Seeding Test Data
+
+VizBoard includes seed scripts to populate **external test databases** (`vizboard_test1`, `vizboard_test2`, `vizboard_test3`) with sample data for widget development and testing.
+
+### Test Database Overview
+
+| Database | Port | Purpose | Tables |
+|----------|------|---------|--------|
+| `vizboard_test1` | 5433 | E-commerce store data | `users`, `products`, `sales`, `reviews` |
+| `vizboard_test2` | 5434 | E-commerce store data | `users`, `products`, `sales`, `reviews` |
+| `vizboard_test3` | 5435 | Business data | `clients`, `commandes`, `apirequestevent` |
+
+### Seed All Test Databases
+
+<Steps>
+
+<Step title="Start Test Databases">
+
+Ensure all test databases are running:
+
+```bash
+docker-compose up -d
+docker ps  # Verify all containers are running
+```
+
+</Step>
+
+<Step title="Run All Seed Scripts">
+
+Populate all test databases with sample data:
+
+```bash
+npm run seed:test-dbs
+```
+
+This command runs all seed scripts sequentially:
+- `seed:store` - Seeds store data to `vizboard_test1` and `vizboard_test2`
+- `seed:clients` - Seeds client data to `vizboard_test3`
+- `seed:commandes` - Seeds order data to `vizboard_test3`
+- `seed:apirequestevent` - Seeds API event logs to `vizboard_test3`
+
+<Note>
+Seeding all databases takes 30-60 seconds depending on your system. Each script creates 60-80 records with realistic data using Faker.js.
+</Note>
+
+</Step>
+
+<Step title="Verify Seed Data">
+
+Connect to a test database to verify the data:
+
+```bash
+docker exec -it vizboard-db_test1-1 psql -U postgres -d vizboard_test1
+
+# Inside psql:
+\dt  # List all tables
+SELECT COUNT(*) FROM users;
+SELECT COUNT(*) FROM products;
+SELECT COUNT(*) FROM sales;
+```
+
+You should see ~60 users, ~60 products, ~80 sales, and ~80 reviews.
+
+</Step>
+
+</Steps>
+
+### Individual Seed Scripts
+
+You can run seed scripts individually for specific databases:
+
+<CodeGroup>
+
+```bash Store Data (Test1/Test2)
+# Seeds e-commerce data to both test1 and test2 databases
+npm run seed:store
+
+# Tables created:
+# - users: Customer accounts with addresses
+# - products: Product catalog with categories and prices
+# - sales: Transaction records linking users and products
+# - reviews: Product reviews with ratings and comments
+```
+
+```bash Client Data (Test3)
+# Seeds business client data to test3 database
+npm run seed:clients
+
+# Creates: clients table with company information
+```
+
+```bash Order Data (Test3)
+# Seeds order/command data to test3 database
+npm run seed:commandes
+
+# Creates: commandes table with order history
+```
+
+```bash API Events (Test3)
+# Seeds API request logs to test3 database
+npm run seed:apirequestevent
+
+# Creates: apirequestevent table with API call logs
+```
+
+</CodeGroup>
+
+### Seed Data Characteristics
+
+<Card title="Realistic Test Data" icon="database">
+All seed scripts use **@faker-js/faker** to generate realistic data:
+- User names, emails, addresses (localized)
+- Product names, descriptions, categories
+- Monetary values with proper decimal formatting
+- Dates and timestamps
+- Random ratings and quantities
+</Card>
+
+**Default Record Counts**:
+- 60 users per database
+- 60 products per database
+- 80 sales transactions
+- 80 product reviews
+
+### Custom Seed Configuration
+
+To modify seed data, edit the scripts in `scripts/` directory:
+
+- `scripts/seed_store.js` - Store data configuration
+- `scripts/seed_clients.js` - Client data from JSON
+- `scripts/seed_commandes.js` - Order data from JSON
+- `scripts/seed_apirequestevent.js` - API event logs from JSON
+
+## Main Database Seeding
+
+The main application database (`vizboard_main`) includes a basic seed script in `prisma/seed.ts`:
+
+```typescript
+import { PrismaClient } from '@prisma/client'
+
+const prisma = new PrismaClient()
+
+async function main() {
+  const user1 = await prisma.user.upsert({
+    where: {email: 'admin@email.com'},
+    update: {},
+    create: {
+      name: 'Admin Vizboard',
+      firstName: 'Admin',
+      lastName: 'Vizboard',
+      email: 'admin@email.com',
+      password: 'admin1234',
+    },
+  })
+  console.log({ user1 })
+}
+```
+
+This creates a default admin user for testing. Run it with:
+
+```bash
+npx prisma db seed
+```
+
+<Warning>
+**Password Hashing**: The seed script stores passwords in plain text. In production, passwords should be hashed using bcrypt before storage.
+</Warning>
+
+## Troubleshooting
+
+### Migration Failed
+
+If migrations fail:
+1. Check that your database is running and accessible
+2. Verify `DATABASE_URL` in `.env` is correct
+3. Ensure PostgreSQL user has CREATE TABLE permissions
+4. Try resetting: `npm run db:reset`
+
+### Seed Script Connection Error
+
+If seed scripts fail to connect:
+- Verify test databases are running: `docker ps`
+- Check database ports (5433, 5434, 5435) are not in use
+- Ensure Docker containers are on the same network
+- Restart Docker Compose: `docker-compose restart`
+
+### Cannot Find Module 'pg'
+
+Install missing dependencies:
+```bash
+npm install pg
+```
+
+### Prisma Client Not Generated
+
+Regenerate Prisma Client:
+```bash
+npx prisma generate
+```
+
+## Next Steps
+
+<Card title="Start Development" icon="rocket">
+With your databases set up, you're ready to start the development server:
+
+```bash
+npm run dev
+```
+
+Visit **http://localhost:3000** to access VizBoard.
+</Card>
+
+### Connect Test Databases
+
+In VizBoard:
+1. Create a new project
+2. Add a database connection with these credentials:
+   - **Host**: `localhost`
+   - **Port**: `5433` (or 5434, 5435)
+   - **Database**: `vizboard_test1` (or test2, test3)
+   - **User**: `postgres`
+   - **Password**: `testdbpass1234`
+3. Create widgets to visualize your test data

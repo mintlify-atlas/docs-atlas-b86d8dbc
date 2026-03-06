@@ -1,0 +1,520 @@
+---
+title: 'Database Connections'
+description: 'Connect to PostgreSQL databases with secure credential storage and automatic schema introspection'
+icon: 'database'
+---
+
+## Overview
+
+Database connections in VizBoard provide secure access to your PostgreSQL databases. Credentials are encrypted before storage, and VizBoard automatically validates connections and introspects database schemas for use in widget configuration.
+
+## PostgreSQL Support
+
+VizBoard currently supports PostgreSQL databases with the following capabilities:
+
+<CardGroup cols={2}>
+  <Card title="Secure Storage" icon="lock">
+    Database credentials are encrypted using industry-standard encryption before storage
+  </Card>
+  <Card title="Connection Validation" icon="check-circle">
+    Automatic validation ensures connections are working before use
+  </Card>
+  <Card title="Schema Introspection" icon="magnifying-glass">
+    Database structure is automatically discovered and cached
+  </Card>
+  <Card title="Multiple Connections" icon="layer-group">
+    Add multiple database connections per project
+  </Card>
+</CardGroup>
+
+## Connection Configuration
+
+Each database connection requires standard PostgreSQL connection parameters:
+
+```typescript
+interface DatabaseConnection {
+  title: string;        // Friendly name for the connection
+  host: string;         // Database host (e.g., "db.example.com")
+  port: number;         // Port number (default: 5432)
+  database: string;     // Database name
+  user: string;         // Database username
+  password: string;     // Database password (encrypted before storage)
+}
+```
+
+### Creating a Connection
+
+Connections are typically created as part of project creation or update:
+
+<Tabs>
+  <Tab title="With New Project">
+    ```typescript
+    import { createProjectWithConnections } from "@/app/actions/project";
+
+    const result = await createProjectWithConnections({
+      title: "Analytics Project",
+      userId: session.user.id,
+      connections: [
+        {
+          title: "Production Database",
+          host: "prod-db.example.com",
+          port: 5432,
+          database: "analytics",
+          user: "readonly_user",
+          password: "secure_password_123"
+        }
+      ]
+    });
+    ```
+  </Tab>
+
+  <Tab title="Add to Existing Project">
+    ```typescript
+    import { updateProject } from "@/app/actions/project";
+
+    const result = await updateProject({
+      id: projectId,
+      connections: [
+        // ... existing connections ...
+        {
+          title: "New Data Warehouse",
+          host: "warehouse.example.com",
+          port: 5432,
+          database: "dwh",
+          user: "analytics_user",
+          password: "secure_password_456"
+        }
+      ]
+    });
+    ```
+  </Tab>
+</Tabs>
+
+## Credential Encryption
+
+VizBoard encrypts database credentials before storing them in the database:
+
+```typescript src/app/actions/project/crud.ts
+import { encrypt } from "@/lib/crypto/crypto";
+
+// Credentials are encrypted before storage
+const encryptedAccess = encrypt(
+  JSON.stringify({
+    host: conn.host,
+    port: conn.port,
+    database: conn.database,
+    user: conn.user,
+    password: conn.password,
+  })
+);
+
+await tx.dbConnection.create({
+  data: {
+    projectId: createdProject.id,
+    title: conn.title,
+    dbAccess: encryptedAccess,  // Encrypted JSON string
+  },
+});
+```
+
+<Note>
+  Passwords are never stored in plain text. The encryption key should be securely managed through environment variables.
+</Note>
+
+## Connection Validation
+
+VizBoard automatically validates database connections to ensure they're working properly.
+
+### Validation Process
+
+<Steps>
+  <Step title="Test Connection">
+    VizBoard attempts to connect to the database using the provided credentials:
+
+    ```typescript
+    const response = await fetch(
+      `${process.env.NEXTAUTH_URL}/api/testdbconnection`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          host: dbAccess.host,
+          port: dbAccess.port,
+          database: dbAccess.database,
+          user: dbAccess.user,
+          password: dbAccess.password,
+        }),
+      }
+    );
+    ```
+  </Step>
+
+  <Step title="Update Status">
+    The connection's validation status is stored in the database:
+
+    ```typescript src/app/actions/project/validation.ts
+    await prisma.dbConnection.update({
+      where: { id: connection.id },
+      data: {
+        isValid: result.success,
+        validationError: result.success ? null : result.error,
+        lastIntrospectionAt: new Date(),
+      },
+    });
+    ```
+  </Step>
+
+  <Step title="Return Results">
+    Validation results include detailed information for each connection:
+
+    ```typescript
+    interface ConnectionValidationResult {
+      id: string;
+      isValid: boolean;
+      error?: string;
+    }
+    ```
+  </Step>
+</Steps>
+
+### Manual Validation
+
+You can manually validate a project's connections:
+
+```typescript
+import { validateProjectConnections } from "@/app/actions/project/validation";
+
+const result = await validateProjectConnections(projectId, userId);
+
+if (result.success) {
+  console.log(`Valid: ${result.validConnections}/${result.totalConnections}`);
+  
+  result.connectionStatuses.forEach(conn => {
+    if (!conn.isValid) {
+      console.error(`Connection ${conn.id} failed: ${conn.error}`);
+    }
+  });
+}
+```
+
+### Quiet Validation
+
+The `validateConnectionsQuietly` function validates connections without UI updates:
+
+```typescript
+import { validateConnectionsQuietly } from "@/app/actions/project/validation";
+
+// Used internally during project creation/update
+const result = await validateConnectionsQuietly(projectId, userId);
+```
+
+<Note>
+  Quiet validation is automatically triggered after creating or updating a project. You typically don't need to call it manually.
+</Note>
+
+## Schema Introspection
+
+VizBoard automatically discovers your database structure through schema introspection.
+
+### Automatic Introspection
+
+Schema introspection runs automatically for valid connections:
+
+```typescript src/app/actions/project/crud.ts
+// After validation, introspect valid connections
+if (validationResult?.success && validationResult?.connectionStatuses) {
+  const validConnections = validationResult.connectionStatuses.filter(
+    (conn) => conn.isValid
+  );
+
+  if (validConnections.length > 0) {
+    // Introspect each valid connection in parallel
+    const introspectionPromises = validConnections.map(
+      async (connStatus) => {
+        try {
+          await CreateDbSchema(connStatus.id);
+          return { connectionId: connStatus.id, success: true };
+        } catch (error) {
+          return {
+            connectionId: connStatus.id,
+            success: false,
+            error: error instanceof Error ? error.message : "Unknown error",
+          };
+        }
+      }
+    );
+
+    await Promise.allSettled(introspectionPromises);
+  }
+}
+```
+
+### Schema Data Structure
+
+The introspected schema is stored as JSON in the database:
+
+```typescript
+// Example schema structure
+const schema = {
+  tables: [
+    {
+      name: "users",
+      columns: [
+        { name: "id", type: "integer", nullable: false },
+        { name: "email", type: "varchar", nullable: false },
+        { name: "created_at", type: "timestamp", nullable: true }
+      ]
+    },
+    {
+      name: "orders",
+      columns: [
+        { name: "id", type: "integer", nullable: false },
+        { name: "user_id", type: "integer", nullable: false },
+        { name: "total", type: "numeric", nullable: false }
+      ]
+    }
+  ]
+};
+```
+
+### Retrieving Schema Information
+
+Get the stored schema for a project:
+
+```typescript
+import { getProjectSchema } from "@/app/actions/project/connections";
+
+const result = await getProjectSchema(projectId);
+
+if (result.success) {
+  console.log("Schema:", result.schema);
+  console.log("Last introspected:", result.lastIntrospectionAt);
+}
+```
+
+### Manual Schema Refresh
+
+Refresh schemas when your database structure changes:
+
+```typescript
+import { regenerateProjectSchemas } from "@/app/actions/project";
+
+const result = await regenerateProjectSchemas(projectId, userId);
+
+if (result.success) {
+  console.log(`Success: ${result.data.successfulRegeneration}`);
+  console.log(`Failed: ${result.data.failedRegeneration}`);
+  
+  result.data.details.forEach(detail => {
+    if (!detail.success) {
+      console.error(`${detail.connectionTitle}: ${detail.error}`);
+    }
+  });
+}
+```
+
+<Note>
+  Schema introspection only runs for connections where `isValid: true`. Invalid connections are skipped.
+</Note>
+
+## Managing Connections
+
+### Update Connection Credentials
+
+Update connection details while preserving the existing password:
+
+```typescript
+import { updateProject } from "@/app/actions/project";
+
+await updateProject({
+  id: projectId,
+  connections: [
+    {
+      id: connectionId,
+      title: "Updated Connection",
+      host: "new-host.example.com",
+      port: 5432,
+      database: "new_database",
+      user: "new_user",
+      password: "KEEP_CURRENT_PASSWORD"  // Preserves existing password
+    }
+  ]
+});
+```
+
+<Tabs>
+  <Tab title="Update Password">
+    ```typescript
+    // Provide a new password to update it
+    await updateProject({
+      id: projectId,
+      connections: [{
+        id: connectionId,
+        password: "new_secure_password"  // Updates password
+        // ... other fields
+      }]
+    });
+    ```
+  </Tab>
+
+  <Tab title="Keep Password">
+    ```typescript
+    // Use special keyword to keep existing password
+    await updateProject({
+      id: projectId,
+      connections: [{
+        id: connectionId,
+        password: "KEEP_CURRENT_PASSWORD"  // Keeps current password
+        // ... other fields
+      }]
+    });
+    ```
+  </Tab>
+</Tabs>
+
+### Delete a Connection
+
+Remove a specific database connection:
+
+```typescript
+import { deleteConnection } from "@/app/actions/project/connections";
+
+const result = await deleteConnection(connectionId, userId);
+
+if (result.success) {
+  console.log(result.message);
+}
+```
+
+<Note type="warning">
+  Deleting a connection removes the encrypted credentials from the database. This action cannot be undone.
+</Note>
+
+## Connection Status
+
+Connections can have three validation states:
+
+<Accordion title="Valid Connection">
+  ```typescript
+  {
+    isValid: true,
+    validationError: null,
+    lastIntrospectionAt: Date  // Timestamp of last validation
+  }
+  ```
+  
+  The connection successfully connected to the database and schema introspection completed.
+</Accordion>
+
+<Accordion title="Invalid Connection">
+  ```typescript
+  {
+    isValid: false,
+    validationError: "Connection refused"  // Error message
+    lastIntrospectionAt: Date
+  }
+  ```
+  
+  The connection failed to connect. Common causes:
+  - Incorrect credentials
+  - Database server unreachable
+  - Network firewall blocking connection
+  - Database not running
+</Accordion>
+
+<Accordion title="Pending Connection">
+  ```typescript
+  {
+    isValid: null,
+    validationError: null,
+    lastIntrospectionAt: null
+  }
+  ```
+  
+  The connection has not been validated yet (newly created or never tested).
+</Accordion>
+
+## Data Model
+
+Database connections are stored in the Prisma schema:
+
+```prisma prisma/schema.prisma
+model DbConnection {
+  id                  String    @id @default(uuid())
+  projectId           String
+  title               String
+  dbAccess            Json      // Encrypted credentials
+  dbSchema            Json?     // Introspected schema
+  lastIntrospectionAt DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  isValid             Boolean?  // null = not validated, true/false = validation result
+  validationError     String?   // Error message if validation failed
+  project             Project   @relation(fields: [projectId], references: [id], onDelete: Cascade)
+
+  @@map("dbconnections")
+}
+```
+
+## Security Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Use Read-Only Users" icon="eye">
+    Create database users with SELECT-only permissions for VizBoard
+  </Card>
+  <Card title="Restrict Network Access" icon="network-wired">
+    Configure firewall rules to allow connections only from your VizBoard instance
+  </Card>
+  <Card title="Rotate Credentials" icon="arrows-rotate">
+    Regularly update database passwords and update them in VizBoard
+  </Card>
+  <Card title="Monitor Connections" icon="chart-line">
+    Review connection validation logs to detect unauthorized access attempts
+  </Card>
+</CardGroup>
+
+## Troubleshooting
+
+<Accordion title="Connection Timeout">
+  **Symptoms**: Connection validation fails with timeout error
+  
+  **Solutions**:
+  - Verify database server is running
+  - Check firewall rules allow connections from VizBoard
+  - Confirm host and port are correct
+  - Test connection from VizBoard server using `psql` command
+</Accordion>
+
+<Accordion title="Authentication Failed">
+  **Symptoms**: `isValid: false` with authentication error
+  
+  **Solutions**:
+  - Verify username and password are correct
+  - Check user has access to the specified database
+  - Confirm PostgreSQL `pg_hba.conf` allows password authentication
+  - Ensure user account is not locked or expired
+</Accordion>
+
+<Accordion title="Schema Not Introspecting">
+  **Symptoms**: Connection valid but `dbSchema` is null
+  
+  **Solutions**:
+  - Check user has SELECT permission on `information_schema`
+  - Manually trigger schema regeneration
+  - Review server logs for introspection errors
+  - Verify database contains tables to introspect
+</Accordion>
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="Projects" icon="folder-kanban" href="/features/projects">
+    Learn about project management
+  </Card>
+  <Card title="Widgets" icon="chart-mixed" href="/features/widgets">
+    Create data visualizations
+  </Card>
+  <Card title="Dashboards" icon="grid" href="/features/dashboards">
+    Build interactive dashboards
+  </Card>
+</CardGroup>

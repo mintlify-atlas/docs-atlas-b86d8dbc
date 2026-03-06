@@ -1,0 +1,491 @@
+---
+title: Text Title Widgets
+description: Organize your dashboard with section titles and text blocks
+icon: heading
+---
+
+Text title widgets help you organize and structure your dashboard by adding titles, headers, and descriptive text blocks. They don't display data but provide context and visual organization.
+
+## Widget Types
+
+<CardGroup cols={2}>
+  <Card title="Section Title" icon="heading">
+    **Type:** `text_titles`  
+    **Subtype:** `section_title` (default)
+    
+    Large heading to mark dashboard sections
+  </Card>
+  <Card title="Text Block" icon="text">
+    **Type:** `text_titles`  
+    **Subtype:** `text_block`
+    
+    Descriptive text content for context
+  </Card>
+</CardGroup>
+
+## Section Title
+
+Section titles are large headings that span the full width of your dashboard (2 columns). They help divide your dashboard into logical sections.
+
+### Configuration
+
+```typescript
+{
+  type: "text_titles",
+  subtype: "section_title",
+  title: string,        // The heading text (required)
+  description?: string, // Optional subtitle or context
+  configs: null
+}
+```
+
+### Examples
+
+#### Basic Section Title
+
+```json
+{
+  "type": "text_titles",
+  "subtype": "section_title",
+  "title": "Sales Performance",
+  "description": "Key metrics and trends for Q4 2024"
+}
+```
+
+#### Section Without Description
+
+```json
+{
+  "type": "text_titles",
+  "subtype": "section_title",
+  "title": "Customer Analytics",
+  "description": ""
+}
+```
+
+### Visual Appearance
+
+<CodeGroup>
+```jsx Rendered Output
+<div className="flex gap-6 justify-between col-span-2">
+  <div>
+    <h2 className="text-2xl mb-2">Sales Performance</h2>
+    <p className="text-sm text-muted-foreground">
+      Key metrics and trends for Q4 2024
+    </p>
+  </div>
+  {/* Settings menu */}
+</div>
+```
+
+```css Styling
+.title {
+  font-size: 1.5rem;      /* text-2xl */
+  margin-bottom: 0.5rem;  /* mb-2 */
+}
+
+.description {
+  font-size: 0.875rem;    /* text-sm */
+  color: var(--muted-foreground);
+}
+```
+</CodeGroup>
+
+### When to Use
+
+<Tabs>
+  <Tab title="Dashboard Organization">
+    Use section titles to divide your dashboard into logical areas:
+    
+    **Example Dashboard Structure:**
+    ```
+    📊 Dashboard
+    ├─ Section Title: "Overview"
+    │  ├─ KPI Card: Total Revenue
+    │  └─ KPI Card: Active Users
+    ├─ Section Title: "Sales Analytics"
+    │  ├─ Chart: Sales by Region
+    │  └─ Datatable: Recent Orders
+    └─ Section Title: "Customer Insights"
+       ├─ Chart: Customer Growth
+       └─ Datatable: Top Customers
+    ```
+  </Tab>
+  
+  <Tab title="Visual Hierarchy">
+    Section titles create visual breaks and hierarchy:
+    
+    - Separate different functional areas
+    - Group related widgets together
+    - Provide context for widget collections
+    - Improve dashboard scanability
+  </Tab>
+  
+  <Tab title="User Guidance">
+    Use descriptions to guide users:
+    
+    ```json
+    {
+      "title": "Real-Time Monitoring",
+      "description": "Live data updated every 30 seconds"
+    }
+    ```
+    
+    ```json
+    {
+      "title": "Historical Trends",
+      "description": "Last 12 months of performance data"
+    }
+    ```
+  </Tab>
+</Tabs>
+
+## Text Block
+
+Text blocks are content widgets that display longer descriptive text. Unlike section titles, they require a description field.
+
+### Configuration
+
+```typescript
+{
+  type: "text_titles",
+  subtype: "text_block",
+  title: string,        // Block heading (required)
+  description: string,  // Text content (required)
+  configs: null
+}
+```
+
+<Note>
+For text blocks, both `title` and `description` are **required**. The description contains the main content you want to display.
+</Note>
+
+### Examples
+
+#### Documentation Block
+
+```json
+{
+  "type": "text_titles",
+  "subtype": "text_block",
+  "title": "How to Use This Dashboard",
+  "description": "This dashboard shows real-time sales data. Click on any chart to drill down. Use the date picker in the top right to change the time period. All data is updated every 5 minutes."
+}
+```
+
+#### Important Notice
+
+```json
+{
+  "type": "text_titles",
+  "subtype": "text_block",
+  "title": "⚠️ Maintenance Notice",
+  "description": "The production database will undergo scheduled maintenance on Dec 15th from 2-4 AM UTC. During this time, data may be delayed or unavailable."
+}
+```
+
+#### Context Block
+
+```json
+{
+  "type": "text_titles",
+  "subtype": "text_block",
+  "title": "About These Metrics",
+  "description": "Revenue figures are calculated as gross sales minus returns and discounts. Customer counts include both active and inactive accounts. All currency is displayed in USD."
+}
+```
+
+### When to Use
+
+<AccordionGroup>
+  <Accordion title="Dashboard instructions">
+    Provide guidance on how to interact with the dashboard:
+    - How to filter data
+    - What actions are available
+    - How to interpret the visualizations
+    - Tips for best use
+  </Accordion>
+  
+  <Accordion title="Important notices">
+    Communicate critical information:
+    - Maintenance schedules
+    - Data quality issues
+    - Known limitations
+    - Temporary changes
+  </Accordion>
+  
+  <Accordion title="Context and definitions">
+    Explain metrics and terminology:
+    - How values are calculated
+    - What definitions are used
+    - Data sources and freshness
+    - Currency or unit information
+  </Accordion>
+  
+  <Accordion title="Compliance disclaimers">
+    Display required legal or compliance text:
+    - Data privacy notices
+    - Terms of use
+    - Regulatory disclaimers
+    - Attribution requirements
+  </Accordion>
+</AccordionGroup>
+
+## Type Normalization
+
+VizBoard accepts multiple variations of text widget type names:
+
+```typescript
+// All of these are normalized to type: "text_titles"
+[
+  "text_titles",
+  "text titles",
+  "text",
+  "title",
+  "section_title",
+  "section title"
+]
+```
+
+Default subtype: `section_title`
+
+Source: `src/lib/extractWidgetTypeInfo.ts:92-116`
+
+## Features
+
+<CardGroup cols={2}>
+  <Card title="Full Width" icon="arrows-left-right">
+    Text widgets span 2 columns for maximum visibility
+  </Card>
+  <Card title="No Data Connection" icon="plug-circle-xmark">
+    No database connection required - pure presentation
+  </Card>
+  <Card title="Markdown Support" icon="markdown">
+    Descriptions support basic text formatting
+  </Card>
+  <Card title="Quick Edit" icon="pen">
+    Edit title and description through settings menu
+  </Card>
+</CardGroup>
+
+## Layout Considerations
+
+### Grid Behavior
+
+<Tabs>
+  <Tab title="Desktop (2 Column Grid)">
+    Text widgets always span the full width:
+    
+    ```
+    ┌─────────────────────────────────────┐
+    │  Section Title Widget (col-span-2)  │
+    ├──────────────────┬──────────────────┤
+    │   Chart Widget   │  Chart Widget    │
+    ├──────────────────┴──────────────────┤
+    │  Text Block Widget (col-span-2)     │
+    ├──────────────────┬──────────────────┤
+    │  Table Widget (col-span-2)          │
+    └─────────────────────────────────────┘
+    ```
+  </Tab>
+  
+  <Tab title="Mobile (1 Column)">
+    All widgets stack vertically:
+    
+    ```
+    ┌─────────────────┐
+    │ Section Title   │
+    ├─────────────────┤
+    │ Chart Widget    │
+    ├─────────────────┤
+    │ Chart Widget    │
+    ├─────────────────┤
+    │ Text Block      │
+    ├─────────────────┤
+    │ Table Widget    │
+    └─────────────────┘
+    ```
+  </Tab>
+</Tabs>
+
+### Best Practices
+
+<Note>
+**Placement Tips:**
+- Place section titles before groups of related widgets
+- Use text blocks sparingly to avoid overwhelming users
+- Consider widget order: titles should introduce, not follow
+- Keep descriptions concise (2-3 sentences ideal)
+</Note>
+
+## Styling
+
+Text widgets use consistent styling from your dashboard theme:
+
+```css
+/* Section Title */
+.section-title {
+  font-size: 1.5rem;           /* text-2xl */
+  line-height: 2rem;
+  margin-bottom: 0.5rem;
+}
+
+/* Description / Subtitle */
+.description {
+  font-size: 0.875rem;         /* text-sm */
+  color: var(--muted-foreground);
+}
+
+/* Container */
+.text-widget-container {
+  display: flex;
+  gap: 1.5rem;                 /* gap-6 */
+  justify-content: space-between;
+  grid-column: span 2;         /* col-span-2 */
+}
+```
+
+## Public Dashboards
+
+<Tip>
+On public dashboards (shared with external users), the settings menu is automatically hidden for text widgets, providing a cleaner read-only experience.
+</Tip>
+
+```typescript
+const isPublicDashboard = 
+  projectData?.isPublic && pathname?.startsWith("/public/")
+
+// Settings menu only shown on private dashboards
+{!isPublicDashboard && <WidgetSettingsMenu widget={widget} />}
+```
+
+## Configuration Dialog
+
+The text widget configuration form is simple:
+
+### Section Title Form
+```
+┌─────────────────────────────────────────┐
+│ Widget Title              [Required]     │
+│ ┌─────────────────────────────────────┐ │
+│ │                                     │ │
+│ └─────────────────────────────────────┘ │
+│                                          │
+│ Widget Description        [Optional]     │
+│ ┌─────────────────────────────────────┐ │
+│ │                                     │ │
+│ │                                     │ │
+│ └─────────────────────────────────────┘ │
+│                                          │
+│              [Cancel]  [Create]          │
+└─────────────────────────────────────────┘
+```
+
+### Text Block Form
+```
+┌─────────────────────────────────────────┐
+│ Widget Title              [Required]     │
+│ ┌─────────────────────────────────────┐ │
+│ │                                     │ │
+│ └─────────────────────────────────────┘ │
+│                                          │
+│ Widget Description        [Required]     │
+│ ┌─────────────────────────────────────┐ │
+│ │                                     │ │
+│ │                                     │ │
+│ └─────────────────────────────────────┘ │
+│                                          │
+│              [Cancel]  [Create]          │
+└─────────────────────────────────────────┘
+```
+
+Source: `src/components/dashboard/widgets/textblocks/textBlocksConfig.tsx:25-153`
+
+## Use Case Examples
+
+<CodeGroup>
+```json Executive Dashboard
+[
+  {
+    "type": "text_titles",
+    "subtype": "section_title",
+    "title": "Executive Summary",
+    "description": "Key performance indicators for Q4 2024"
+  },
+  {
+    "type": "text_titles",
+    "subtype": "text_block",
+    "title": "Note",
+    "description": "All figures are preliminary and subject to final audit. Currency in USD millions."
+  }
+]
+```
+
+```json Operations Dashboard
+[
+  {
+    "type": "text_titles",
+    "subtype": "section_title",
+    "title": "System Health"
+  },
+  {
+    "type": "text_titles",
+    "subtype": "section_title",
+    "title": "Active Alerts"
+  },
+  {
+    "type": "text_titles",
+    "subtype": "section_title",
+    "title": "Performance Metrics"
+  }
+]
+```
+
+```json Analytics Dashboard
+[
+  {
+    "type": "text_titles",
+    "subtype": "section_title",
+    "title": "User Behavior",
+    "description": "Session and engagement analytics"
+  },
+  {
+    "type": "text_titles",
+    "subtype": "text_block",
+    "title": "Methodology",
+    "description": "Sessions are counted as unique user visits. Engagement rate is calculated as interactions per session. Bounce rate includes exits within 10 seconds."
+  }
+]
+```
+</CodeGroup>
+
+## Source Code Reference
+
+Text widget implementation:
+- Configuration: `src/components/dashboard/widgets/textblocks/textBlocksConfig.tsx:14-153`
+- Section Title Rendering: `src/components/dashboard/widgets/textblocks/sectionTitle.tsx:14-56`
+- Text Block Rendering: `src/components/dashboard/widgets/textblocks/textBlock.tsx`
+- Type Normalization: `src/lib/extractWidgetTypeInfo.ts:92-116`
+
+## Validation
+
+### Section Title
+- ✅ Title is required (max 100 characters)
+- ✅ Description is optional
+- ✅ No configs needed
+
+### Text Block
+- ✅ Title is required (max 100 characters)
+- ✅ Description is required (must not be empty)
+- ✅ No configs needed
+
+## Related Documentation
+
+<CardGroup cols={2}>
+  <Card title="Dashboard Layout" icon="grid" href="../customize/dashboard-layout">
+    Learn about grid system and widget positioning
+  </Card>
+  <Card title="Creating Widgets" icon="plus" href="../customize/creating-widgets">
+    Guide to adding widgets to your dashboard
+  </Card>
+</CardGroup>

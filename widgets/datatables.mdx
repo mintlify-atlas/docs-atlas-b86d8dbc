@@ -1,0 +1,205 @@
+---
+title: Simple Datatables
+description: Display data from single or multiple tables within the same database connection
+icon: table
+---
+
+Simple Datatables allow you to display data from one or multiple tables from a single database connection. They provide interactive features including filtering, sorting, searching, and pagination.
+
+## Widget Type
+
+**Type:** `datatables`  
+**Subtype:** `simple_dataTable` (default)
+
+## Configuration
+
+### Basic Setup
+
+When creating a simple datatable widget, you need to configure:
+
+1. **Connection** - Select the database connection to use
+2. **Tables** - Choose one or more tables from that connection
+3. **Title** - A descriptive name for your widget (required)
+4. **Description** - Optional description to help identify the widget's purpose
+
+### Configuration Object
+
+```typescript
+{
+  connectionId: string,  // Database connection ID
+  tables: string[]       // Array of table names to display
+}
+```
+
+<Note>
+If no `connectionId` is specified, the system will use the project's primary database connection.
+</Note>
+
+## Examples
+
+### Single Table Configuration
+
+```json
+{
+  "type": "datatables",
+  "subtype": "simple_dataTable",
+  "title": "Customer Data",
+  "description": "List of all customers",
+  "configs": {
+    "connectionId": "conn_123abc",
+    "tables": ["customers"]
+  }
+}
+```
+
+### Multiple Tables Configuration
+
+```json
+{
+  "type": "datatables",
+  "subtype": "simple_dataTable",
+  "title": "Sales Database Tables",
+  "description": "Orders, products, and inventory",
+  "configs": {
+    "connectionId": "conn_123abc",
+    "tables": ["orders", "products", "inventory"]
+  }
+}
+```
+
+### Using Primary Connection
+
+```json
+{
+  "type": "datatables",
+  "subtype": "simple_dataTable",
+  "title": "User Activity",
+  "configs": {
+    "tables": ["activity_log", "sessions"]
+  }
+}
+```
+
+## Features
+
+<CardGroup cols={2}>
+  <Card title="Interactive Filtering" icon="filter">
+    Filter columns by data type: string, number, date, boolean, and array values
+  </Card>
+  <Card title="Column Sorting" icon="arrow-down-a-z">
+    Sort any column in ascending or descending order
+  </Card>
+  <Card title="Global Search" icon="magnifying-glass">
+    Search across all visible columns simultaneously
+  </Card>
+  <Card title="Pagination" icon="list">
+    Navigate large datasets with configurable page sizes
+  </Card>
+  <Card title="Column Resizing" icon="arrows-left-right">
+    Resize columns to view your data comfortably
+  </Card>
+  <Card title="Table Switching" icon="arrows-rotate">
+    Switch between multiple tables using a dropdown selector
+  </Card>
+</CardGroup>
+
+## Data Requirements
+
+<Tabs>
+  <Tab title="Connection">
+    - Must have a valid database connection configured in your project
+    - Connection must have schema information available (`hasSchema: true`)
+    - Connection should be active and accessible
+  </Tab>
+  <Tab title="Tables">
+    - At least one table must be selected
+    - Tables must exist in the selected connection's schema
+    - Table names are case-sensitive
+    - All selected tables should have accessible data
+  </Tab>
+  <Tab title="Columns">
+    - Columns are automatically detected from the schema
+    - Supported data types: string, number, boolean, date, array, JSON
+    - Column types determine available filter options
+  </Tab>
+</Tabs>
+
+## Column Filtering
+
+Datasets support different filter types based on column data types:
+
+### String Columns
+- Contains
+- Does not contain
+- Equals
+- Not equals
+- Starts with
+- Ends with
+
+### Number Columns
+- Equals
+- Not equals
+- Greater than
+- Greater than or equal
+- Less than
+- Less than or equal
+- Between
+
+### Date Columns
+- Date range picker
+- Before date
+- After date
+- Between dates
+
+### Boolean Columns
+- True/False toggle
+
+### Array Columns
+- Contains value
+- Does not contain value
+
+<Tip>
+Filters persist in the browser's local storage, so users' filter preferences are maintained across sessions.
+</Tip>
+
+## Usage Tips
+
+<AccordionGroup>
+  <Accordion title="When to use multiple tables">
+    Use multiple tables in a single widget when:
+    - Tables have similar structures
+    - You want users to quickly switch between related datasets
+    - Tables belong to the same logical grouping (e.g., sales data)
+    
+    The widget displays a dropdown selector when multiple tables are configured.
+  </Accordion>
+  
+  <Accordion title="Performance considerations">
+    - Large tables are paginated automatically
+    - Initial page size is 10 rows (configurable by users)
+    - Column filtering happens on the client side after data is fetched
+    - Consider limiting the number of tables in a single widget to maintain performance
+  </Accordion>
+  
+  <Accordion title="Table selection persistence">
+    When a user selects a specific table from a multi-table widget, their choice is saved in local storage and restored on their next visit.
+  </Accordion>
+</AccordionGroup>
+
+## Source Code Reference
+
+The datatable widget implementation can be found at:
+- Configuration: `src/components/dashboard/widgets/datatable/datatableConfig.tsx`
+- Widget Rendering: `src/components/dashboard/widgets/datatable/datatableWidget.tsx`
+- Column Definitions: `src/components/dashboard/widgets/datatable/datatableColumns.tsx`
+
+## Related Widgets
+
+<CardGroup cols={2}>
+  <Card title="Integrated Datatables" icon="link" href="./integrated-datatables">
+    Compare data from multiple database connections
+  </Card>
+  <Card title="Charts" icon="chart-line" href="./charts">
+    Visualize your table data with bar, line, area, and pie charts
+  </Card>
+</CardGroup>

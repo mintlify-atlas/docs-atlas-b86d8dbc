@@ -1,0 +1,276 @@
+---
+title: 'Project API Routes'
+description: 'HTTP endpoints for managing projects, visibility, and user projects'
+---
+
+## Get User Projects
+
+<ParamField query="userId" type="string" required>
+  The ID of the user whose projects to fetch
+</ParamField>
+
+### Request
+
+```http
+GET /api/userprojects?userId={userId}
+```
+
+### Authentication
+
+Requires an active session. Returns 401 Unauthorized if not authenticated.
+
+### Response
+
+<ResponseField name="projects" type="array">
+  Array of project objects with connection and widget statistics
+  
+  <ResponseField name="id" type="string">
+    Unique project identifier
+  </ResponseField>
+  
+  <ResponseField name="title" type="string">
+    Project title
+  </ResponseField>
+  
+  <ResponseField name="description" type="string">
+    Project description
+  </ResponseField>
+  
+  <ResponseField name="isPublic" type="boolean">
+    Whether the project is publicly accessible
+  </ResponseField>
+  
+  <ResponseField name="idPublic" type="string | null">
+    Public ID for sharing the project (null if not public)
+  </ResponseField>
+  
+  <ResponseField name="databases" type="string[]">
+    Array of database connection titles
+  </ResponseField>
+  
+  <ResponseField name="totalConnections" type="number">
+    Total number of database connections
+  </ResponseField>
+  
+  <ResponseField name="validConnections" type="number">
+    Number of validated and working connections
+  </ResponseField>
+  
+  <ResponseField name="hasValidatedConnections" type="boolean">
+    Whether any connections have been validated
+  </ResponseField>
+  
+  <ResponseField name="lastValidationDate" type="string | undefined">
+    ISO timestamp of the most recent connection validation
+  </ResponseField>
+  
+  <ResponseField name="totalSchemas" type="number">
+    Number of valid database schemas
+  </ResponseField>
+  
+  <ResponseField name="validSchemas" type="number">
+    Number of successfully introspected schemas
+  </ResponseField>
+  
+  <ResponseField name="hasIntrospectedSchemas" type="boolean">
+    Whether any schemas have been introspected
+  </ResponseField>
+  
+  <ResponseField name="lastSchemaIntrospectionAt" type="string | undefined">
+    ISO timestamp of the most recent schema introspection
+  </ResponseField>
+  
+  <ResponseField name="widgetCount" type="number">
+    Total number of widgets in the project
+  </ResponseField>
+  
+  <ResponseField name="createdAt" type="string">
+    ISO timestamp of project creation
+  </ResponseField>
+  
+  <ResponseField name="updatedAt" type="string">
+    ISO timestamp of last project update
+  </ResponseField>
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+```javascript fetch
+const response = await fetch('/api/userprojects?userId=user_123', {
+  method: 'GET',
+  credentials: 'include'
+});
+
+const data = await response.json();
+```
+
+```bash cURL
+curl -X GET "https://yourapp.com/api/userprojects?userId=user_123" \
+  -H "Cookie: session=..." 
+```
+</CodeGroup>
+
+<CodeGroup>
+```json 200 Success
+{
+  "projects": [
+    {
+      "id": "proj_abc123",
+      "title": "Sales Dashboard",
+      "description": "Q4 sales analytics",
+      "isPublic": false,
+      "idPublic": null,
+      "databases": ["PostgreSQL Production", "MySQL Analytics"],
+      "totalConnections": 2,
+      "validConnections": 2,
+      "hasValidatedConnections": true,
+      "lastValidationDate": "2026-03-06T12:00:00.000Z",
+      "totalSchemas": 2,
+      "validSchemas": 2,
+      "hasIntrospectedSchemas": true,
+      "lastSchemaIntrospectionAt": "2026-03-06T12:05:00.000Z",
+      "widgetCount": 5,
+      "createdAt": "2026-03-01T10:00:00.000Z",
+      "updatedAt": "2026-03-06T12:05:00.000Z"
+    }
+  ]
+}
+```
+
+```json 400 Missing userId
+{
+  "projects": [],
+  "error": "Missing userId"
+}
+```
+
+```json 401 Unauthorized
+{
+  "error": "Unauthorized"
+}
+```
+
+```json 500 Server Error
+{
+  "projects": [],
+  "error": "Error fetching projects"
+}
+```
+</CodeGroup>
+
+---
+
+## Update Project Visibility
+
+<ParamField path="projectId" type="string" required>
+  The ID of the project to update
+</ParamField>
+
+<ParamField body="public" type="boolean" required>
+  Whether to make the project public (true) or private (false)
+</ParamField>
+
+### Request
+
+```http
+POST /api/projects/{projectId}/public
+```
+
+### Authentication
+
+Requires an active session. Only the project owner can update visibility.
+
+### Request Body
+
+```json
+{
+  "public": true
+}
+```
+
+### Behavior
+
+- If making public and no `idPublic` exists, generates a new 12-character public ID using nanoid
+- If setting to private, removes the `idPublic`
+- If the project has no valid connections, forces `isPublic` to false and removes `idPublic`
+- Only projects with at least one valid database connection can be made public
+
+### Response
+
+<ResponseField name="isPublic" type="boolean">
+  Updated public visibility status
+</ResponseField>
+
+<ResponseField name="idPublic" type="string | null">
+  The public ID for sharing (generated if made public, null if private)
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+```javascript fetch
+const response = await fetch('/api/projects/proj_abc123/public', {
+  method: 'POST',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  credentials: 'include',
+  body: JSON.stringify({ public: true })
+});
+
+const data = await response.json();
+```
+
+```bash cURL
+curl -X POST "https://yourapp.com/api/projects/proj_abc123/public" \
+  -H "Content-Type: application/json" \
+  -H "Cookie: session=..." \
+  -d '{"public": true}'
+```
+</CodeGroup>
+
+<CodeGroup>
+```json 200 Made Public
+{
+  "isPublic": true,
+  "idPublic": "xYz9AbC12345"
+}
+```
+
+```json 200 Made Private
+{
+  "isPublic": false,
+  "idPublic": null
+}
+```
+
+```json 200 Forced Private (No Valid Connections)
+{
+  "isPublic": false,
+  "idPublic": null
+}
+```
+
+```json 401 Unauthorized
+{
+  "error": "Unauthorized"
+}
+```
+
+```json 404 Not Found
+{
+  "error": "Project not found"
+}
+```
+
+```json 500 Server Error
+{
+  "error": "Error updating project visibility"
+}
+```
+</CodeGroup>
+
+<Note>
+  Projects without valid database connections cannot be made public. The API will automatically set `isPublic` to false and remove the `idPublic` if there are no valid connections.
+</Note>

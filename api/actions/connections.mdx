@@ -1,0 +1,589 @@
+---
+title: 'Connection Actions'
+description: 'Server actions for managing database connections'
+icon: 'database'
+---
+
+## Overview
+
+Connection server actions handle database connection management, including deletion, schema retrieval, validation, and introspection.
+
+---
+
+## deleteConnection
+
+Deletes a specific database connection from a project.
+
+```typescript
+export async function deleteConnection(
+  connectionId: string,
+  userId: string
+): Promise<DeleteConnectionResponse>
+```
+
+### Parameters
+
+<ParamField path="connectionId" type="string" required>
+  ID of the connection to delete
+</ParamField>
+
+<ParamField path="userId" type="string" required>
+  ID of the user requesting deletion (must own the parent project)
+</ParamField>
+
+### Validation
+
+The connection ID is validated using the `ConnectionDeleteSchema`:
+
+```typescript
+const ConnectionDeleteSchema = z.object({
+  id: z.string().min(1, "Connection ID is required")
+})
+```
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  Indicates if deletion was successful
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Success message with connection and project details
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Error message (only when success is false)
+  
+  Possible errors:
+  - `"Invalid connection ID"`
+  - `"Connection not found or you don't have permission to delete it"`
+  - `"Failed to delete connection"`
+</ResponseField>
+
+### Behavior
+
+- **Ownership verification**: Only the project owner can delete connections
+- **Cascade impact**: Deleting a connection may affect widgets using that schema
+- **Revalidation**: Automatically revalidates `/projects` and `/projects/:id` paths
+
+### Example
+
+<CodeGroup>
+```typescript Usage
+import { deleteConnection } from '@/app/actions/project/connections'
+
+const result = await deleteConnection('conn_123', 'clx1234567')
+
+if (result.success) {
+  console.log(result.message)
+  // "Connection deleted from project 'Analytics Dashboard'"
+} else {
+  console.error(result.error)
+}
+```
+
+```json Response (Success)
+{
+  "success": true,
+  "message": "Connection deleted from project 'Analytics Dashboard'"
+}
+```
+
+```json Response (Error)
+{
+  "success": false,
+  "error": "Connection not found or you don't have permission to delete it"
+}
+```
+</CodeGroup>
+
+<Warning>
+  Deleting a connection is irreversible and may break widgets that depend on its schema.
+</Warning>
+
+---
+
+## getProjectSchema
+
+Retrieves the stored database schema for a project from the first available connection with an introspected schema.
+
+```typescript
+export async function getProjectSchema(
+  projectId: string
+): Promise<GetSchemaResponse>
+```
+
+### Parameters
+
+<ParamField path="projectId" type="string" required>
+  ID of the project to retrieve schema for
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  Indicates if schema retrieval was successful
+</ResponseField>
+
+<ResponseField name="schema" type="DbSchema">
+  The database schema object (only when success is true)
+  
+  <ResponseField name="schema.tables" type="Table[]">
+    Array of table definitions
+    
+    <ResponseField name="tables[].name" type="string">
+      Table name
+    </ResponseField>
+    
+    <ResponseField name="tables[].columns" type="Column[]">
+      Array of column definitions
+      
+      <ResponseField name="columns[].name" type="string">
+        Column name
+      </ResponseField>
+      
+      <ResponseField name="columns[].type" type="string">
+        Column data type (e.g., "integer", "varchar", "timestamp")
+      </ResponseField>
+      
+      <ResponseField name="columns[].nullable" type="boolean">
+        Whether the column accepts NULL values
+      </ResponseField>
+      
+      <ResponseField name="columns[].defaultValue" type="string | null">
+        Default value for the column
+      </ResponseField>
+    </ResponseField>
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="lastIntrospectionAt" type="Date | null">
+  Timestamp of the last schema introspection
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Error message (only when success is false)
+  
+  Possible errors:
+  - `"Valid project ID is required"`
+  - `"Project not found"`
+  - `"No schema found for this project"`
+  - `"Invalid schema format"`
+  - `"Failed to fetch project schema"`
+</ResponseField>
+
+### Behavior
+
+- Returns schema from the first connection with a non-null `dbSchema` field
+- Handles both JSON string and object formats for stored schemas
+- Includes timestamp of last introspection
+
+### Example
+
+<CodeGroup>
+```typescript Usage
+import { getProjectSchema } from '@/app/actions/project/connections'
+
+const result = await getProjectSchema('clx7890abc')
+
+if (result.success && result.schema) {
+  console.log('Tables:', result.schema.tables.length)
+  console.log('Last introspection:', result.lastIntrospectionAt)
+  
+  result.schema.tables.forEach(table => {
+    console.log(`Table: ${table.name} (${table.columns.length} columns)`)
+  })
+}
+```
+
+```json Response (Success)
+{
+  "success": true,
+  "schema": {
+    "tables": [
+      {
+        "name": "users",
+        "columns": [
+          {
+            "name": "id",
+            "type": "integer",
+            "nullable": false,
+            "defaultValue": "nextval('users_id_seq')"
+          },
+          {
+            "name": "email",
+            "type": "varchar",
+            "nullable": false,
+            "defaultValue": null
+          },
+          {
+            "name": "created_at",
+            "type": "timestamp",
+            "nullable": false,
+            "defaultValue": "now()"
+          }
+        ]
+      }
+    ]
+  },
+  "lastIntrospectionAt": "2024-01-15T10:30:00.000Z"
+}
+```
+</CodeGroup>
+
+<Info>
+  Schemas are automatically introspected when connections are created or validated. Use `regenerateProjectSchemas` to refresh.
+</Info>
+
+---
+
+## validateProjectConnections
+
+Validates all database connections in a project by testing connectivity.
+
+```typescript
+export async function validateProjectConnections(
+  projectId: string,
+  userId: string
+): Promise<ValidationResponse>
+```
+
+### Parameters
+
+<ParamField path="projectId" type="string" required>
+  ID of the project to validate connections for
+</ParamField>
+
+<ParamField path="userId" type="string" required>
+  ID of the user requesting validation (must own the project)
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  Indicates if validation process completed successfully
+</ResponseField>
+
+<ResponseField name="validConnections" type="number">
+  Number of valid connections
+</ResponseField>
+
+<ResponseField name="totalConnections" type="number">
+  Total number of connections tested
+</ResponseField>
+
+<ResponseField name="connectionStatuses" type="ConnectionStatus[]">
+  Detailed status for each connection
+  
+  <ResponseField name="connectionStatuses[].id" type="string">
+    Connection ID
+  </ResponseField>
+  
+  <ResponseField name="connectionStatuses[].isValid" type="boolean">
+    Whether the connection is valid
+  </ResponseField>
+  
+  <ResponseField name="connectionStatuses[].error" type="string | undefined">
+    Error message (if connection failed)
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Error message (only when success is false)
+</ResponseField>
+
+### Behavior
+
+- **Parallel validation**: Tests all connections concurrently using `Promise.allSettled`
+- **Connection test**: Makes HTTP request to `/api/testdbconnection` for each connection
+- **No persistence**: Results are returned but NOT saved to the database
+- **Read-only**: Does not modify connection status in the database
+
+### Example
+
+<CodeGroup>
+```typescript Usage
+import { validateProjectConnections } from '@/app/actions/project/validation'
+
+const result = await validateProjectConnections('clx7890abc', 'clx1234567')
+
+if (result.success) {
+  console.log(`Valid: ${result.validConnections}/${result.totalConnections}`)
+  
+  result.connectionStatuses?.forEach(status => {
+    if (!status.isValid) {
+      console.error(`Connection ${status.id} failed: ${status.error}`)
+    }
+  })
+}
+```
+
+```json Response
+{
+  "success": true,
+  "validConnections": 2,
+  "totalConnections": 3,
+  "connectionStatuses": [
+    {
+      "id": "conn_123",
+      "isValid": true
+    },
+    {
+      "id": "conn_456",
+      "isValid": true
+    },
+    {
+      "id": "conn_789",
+      "isValid": false,
+      "error": "Connection refused"
+    }
+  ]
+}
+```
+</CodeGroup>
+
+---
+
+## validateConnectionsQuietly
+
+Validates connections and updates their status in the database without triggering UI updates.
+
+```typescript
+export async function validateConnectionsQuietly(
+  projectId: string,
+  userId: string
+): Promise<ValidationResponse>
+```
+
+### Parameters
+
+<ParamField path="projectId" type="string" required>
+  ID of the project to validate connections for
+</ParamField>
+
+<ParamField path="userId" type="string" required>
+  ID of the user requesting validation (must own the project)
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  Indicates if validation completed successfully
+</ResponseField>
+
+<ResponseField name="validConnections" type="number">
+  Number of valid connections
+</ResponseField>
+
+<ResponseField name="totalConnections" type="number">
+  Total number of connections tested
+</ResponseField>
+
+<ResponseField name="connectionStatuses" type="ConnectionStatus[]">
+  Detailed status for each connection
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Error message (only when success is false)
+</ResponseField>
+
+### Behavior
+
+- **Database persistence**: Updates each connection's `isValid`, `validationError`, and `lastIntrospectionAt` fields
+- **Parallel validation**: Tests all connections concurrently
+- **Background operation**: Designed for silent validation after create/update operations
+- **No revalidation**: Does not trigger Next.js path revalidation
+- **Empty project handling**: Returns success with 0 connections if project has no connections
+
+### Example
+
+```typescript
+import { validateConnectionsQuietly } from '@/app/actions/project/validation'
+
+// Called automatically after project creation/update
+const result = await validateConnectionsQuietly('clx7890abc', 'clx1234567')
+
+if (result.success) {
+  console.log(`Validated ${result.validConnections} connections silently`)
+}
+```
+
+<Note>
+  This action is automatically called after `createProjectWithConnections` and `updateProject`. You rarely need to call it directly.
+</Note>
+
+---
+
+## CreateDbSchema
+
+Introspects a database connection to extract and store its schema (tables, columns, types).
+
+```typescript
+export default async function CreateDbSchema(
+  connectionId: string
+): Promise<CreateSchemaResponse>
+```
+
+### Parameters
+
+<ParamField path="connectionId" type="string" required>
+  ID of the database connection to introspect
+</ParamField>
+
+### Response
+
+Returns the introspected schema data or throws an error.
+
+<ResponseField name="tables" type="Table[]">
+  Array of table definitions extracted from the database
+</ResponseField>
+
+### Behavior
+
+- **API call**: Makes HTTP POST request to `/api/createschema`
+- **Database update**: Stores schema in the connection's `dbSchema` field
+- **Timestamp update**: Updates `lastIntrospectionAt` timestamp
+- **Error handling**: Throws detailed error messages on failure
+
+### Errors
+
+Throws `Error` with descriptive messages:
+- `"Invalid connection ID provided"`
+- `"API call failed with status {statusCode}"`
+- `"Failed to create database schema: {errorMessage}"`
+
+### Example
+
+<CodeGroup>
+```typescript Usage
+import CreateDbSchema from '@/app/actions/project/database'
+
+try {
+  const schema = await CreateDbSchema('conn_123')
+  console.log('Introspected tables:', schema.tables)
+} catch (error) {
+  console.error('Schema introspection failed:', error.message)
+}
+```
+
+```typescript Auto-introspection
+// This is called automatically after creating/updating valid connections
+const validConnections = result.connectionStatuses.filter(c => c.isValid)
+
+for (const conn of validConnections) {
+  await CreateDbSchema(conn.id)
+}
+```
+</CodeGroup>
+
+<Info>
+  Schema introspection is automatically triggered when connections are created or updated. Manual calls are only needed for schema refresh.
+</Info>
+
+---
+
+## Type Definitions
+
+```typescript
+interface DeleteConnectionResponse {
+  success: boolean
+  message?: string
+  error?: string
+}
+
+interface GetSchemaResponse {
+  success: boolean
+  schema?: DbSchema
+  lastIntrospectionAt?: Date | null
+  error?: string
+}
+
+interface DbSchema {
+  tables: Table[]
+}
+
+interface Table {
+  name: string
+  columns: Column[]
+}
+
+interface Column {
+  name: string
+  type: string           // e.g., "integer", "varchar", "timestamp"
+  nullable: boolean
+  defaultValue: string | null
+}
+
+interface ValidationResponse {
+  success: boolean
+  validConnections?: number
+  totalConnections?: number
+  connectionStatuses?: ConnectionStatus[]
+  error?: string
+}
+
+interface ConnectionStatus {
+  id: string
+  isValid: boolean
+  error?: string
+}
+
+interface CreateSchemaResponse {
+  tables: Table[]
+}
+```
+
+---
+
+## Validation Schemas
+
+Connection-related Zod schemas from `@/lib/projects/schemas`:
+
+```typescript
+// Connection title (1-50 characters)
+const ConnectionTitleSchema = z.string()
+  .min(1, "Connection title is required")
+  .max(50, "Connection title cannot exceed 50 characters")
+
+// Database host (IP, localhost, or hostname)
+const DatabaseHostSchema = z.string()
+  .min(1, "Host is required")
+  .refine((value) => {
+    // Validates IPv4, IPv6, localhost, or valid hostname
+  })
+
+// Database port (1-65535)
+const DatabasePortSchema = z.number()
+  .min(1, "Port is required")
+  .max(65535, "Port must be between 1 and 65535")
+
+// Database name (1-60 chars, alphanumeric + hyphens/underscores)
+const DatabaseNameSchema = z.string()
+  .min(1, "Database name is required")
+  .max(60, "Database name cannot exceed 60 characters")
+  .regex(/^[a-zA-Z0-9_-]+$/, "Only letters, numbers, hyphens, and underscores allowed")
+
+// Database user (1-50 characters)
+const DatabaseUserSchema = z.string()
+  .min(1, "Username is required")
+  .max(50, "Username cannot exceed 50 characters")
+
+// Database password (min 1 character)
+const DatabasePasswordSchema = z.string()
+  .min(1, "Password is required")
+
+// Complete connection configuration
+const DatabaseConfigSchema = z.object({
+  title: ConnectionTitleSchema,
+  host: DatabaseHostSchema,
+  port: DatabasePortSchema,
+  database: DatabaseNameSchema,
+  user: DatabaseUserSchema,
+  password: DatabasePasswordSchema,
+})
+
+// Connection deletion
+const ConnectionDeleteSchema = z.object({
+  id: z.string().min(1, "Connection ID is required")
+})
+```

@@ -1,97 +1,130 @@
 ---
-title: "Introduction"
-description: "Welcome to the new home for your documentation"
+title: "Welcome to VizBoard"
+description: "A powerful data visualization platform that connects to PostgreSQL databases and creates interactive dashboards with dynamic tables and customizable charts"
 ---
 
-## Setting up
+## Get Started in Minutes
 
-Get your documentation site up and running in minutes.
+VizBoard makes it easy to connect your databases, create beautiful visualizations, and share insights with your team.
 
-<Card
-  title="Start here"
-  icon="rocket"
-  href="/quickstart"
-  horizontal
->
-  Follow our three step quickstart guide.
-</Card>
-
-## Make it yours
-
-Design a docs site that looks great and empowers your users.
-
-<Columns cols={2}>
+<CardGroup cols={2}>
   <Card
-    title="Edit locally"
-    icon="pen-to-square"
-    href="/development"
+    title="Installation"
+    icon="download"
+    href="/installation"
   >
-    Edit your docs locally and preview them in real time.
+    Set up VizBoard with Docker and environment configuration
   </Card>
   <Card
-    title="Customize your site"
-    icon="palette"
-    href="/essentials/settings"
+    title="Quickstart Guide"
+    icon="rocket"
+    href="/quickstart"
   >
-    Customize the design and colors of your site to match your brand.
+    Create your first project and dashboard in under 5 minutes
   </Card>
-    <Card
-    title="Set up navigation"
-    icon="map"
-    href="/essentials/navigation"
+</CardGroup>
+
+## Core Features
+
+Everything you need to visualize and analyze your data.
+
+<CardGroup cols={2}>
+  <Card
+    title="Projects"
+    icon="folder"
+    href="/features/projects"
   >
-    Organize your docs to help users find what they need and succeed with your product.
+    Organize your work with projects that support public/private sharing
   </Card>
   <Card
-    title="API documentation"
-    icon="terminal"
-    href="/api-reference/introduction"
+    title="Database Connections"
+    icon="database"
+    href="/features/database-connections"
   >
-    Auto-generate API documentation from OpenAPI specifications.
-  </Card>
-</Columns>
-
-## Create beautiful pages
-
-Everything you need to create world-class documentation.
-
-<Columns cols={2}>
-  <Card
-    title="Write with MDX"
-    icon="pen-fancy"
-    href="/essentials/markdown"
-  >
-    Use MDX to style your docs pages.
+    Connect to PostgreSQL with AES-256-GCM encrypted credentials
   </Card>
   <Card
-    title="Code samples"
+    title="Dynamic Widgets"
+    icon="grid-2"
+    href="/features/widgets"
+  >
+    Build dashboards with datatables, charts, and text blocks
+  </Card>
+  <Card
+    title="Interactive Dashboards"
+    icon="chart-mixed"
+    href="/features/dashboards"
+  >
+    Drag and drop to organize widgets and create custom layouts
+  </Card>
+</CardGroup>
+
+## Widget Types
+
+Create rich visualizations with multiple widget types.
+
+<CardGroup cols={2}>
+  <Card
+    title="DataTables"
+    icon="table"
+    href="/widgets/datatables"
+  >
+    Display data with sorting, filtering, and pagination
+  </Card>
+  <Card
+    title="Charts"
+    icon="chart-line"
+    href="/widgets/charts"
+  >
+    Visualize with bar, line, area, and pie charts
+  </Card>
+  <Card
+    title="Integrated Tables"
+    icon="table-columns"
+    href="/widgets/integrated-datatables"
+  >
+    Compare data from multiple database connections
+  </Card>
+  <Card
+    title="Text Blocks"
+    icon="heading"
+    href="/widgets/text-blocks"
+  >
+    Add titles and sections to organize your dashboard
+  </Card>
+</CardGroup>
+
+## Development
+
+Resources for developers and contributors.
+
+<CardGroup cols={2}>
+  <Card
+    title="Architecture"
+    icon="sitemap"
+    href="/development/architecture"
+  >
+    Learn about VizBoard's Next.js architecture and design patterns
+  </Card>
+  <Card
+    title="Tech Stack"
+    icon="layer-group"
+    href="/development/tech-stack"
+  >
+    Explore the technologies powering VizBoard
+  </Card>
+  <Card
+    title="API Reference"
     icon="code"
-    href="/essentials/code"
+    href="/api/actions/auth"
   >
-    Add sample code to demonstrate how to use your product.
+    Server actions and API routes documentation
   </Card>
   <Card
-    title="Images"
-    icon="image"
-    href="/essentials/images"
+    title="Security"
+    icon="shield"
+    href="/development/security"
   >
-    Display images and other media.
+    Learn about encryption, authentication, and best practices
   </Card>
-  <Card
-    title="Reusable snippets"
-    icon="recycle"
-    href="/essentials/reusable-snippets"
-  >
-    Write once and reuse across your docs.
-  </Card>
-</Columns>
-
-## Need inspiration?
-
-<Card
-  title="See complete examples"
-  icon="stars"
-  href="https://mintlify.com/customers"
->
-  Browse our showcase of exceptional documentation sites.
-</Card>
+</CardGroup>

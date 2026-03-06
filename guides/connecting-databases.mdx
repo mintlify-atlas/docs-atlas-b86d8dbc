@@ -1,0 +1,488 @@
+---
+title: 'Connecting Databases'
+description: 'Step-by-step guide to connect PostgreSQL databases to your VizBoard projects'
+icon: 'database'
+---
+
+VizBoard allows you to connect PostgreSQL databases to your projects for data visualization and analysis. Database credentials are encrypted at rest for security.
+
+## Overview
+
+Each VizBoard project can have multiple database connections. When you add a connection:
+
+1. Credentials are encrypted using AES-256 encryption
+2. Connection validity is automatically tested
+3. Database schema is introspected and cached
+4. You can create widgets using tables from connected databases
+
+<Note>
+  Currently, VizBoard supports **PostgreSQL databases only**. Support for additional databases may be added in future releases.
+</Note>
+
+## Adding a Database Connection
+
+You can add database connections when creating a new project or editing an existing one.
+
+<Steps>
+  <Step title="Navigate to Project Form">
+    
+    **For New Projects:**
+    - Go to `/projects` and click "New Project"
+    - Or click the "Create Project" button in the navigation
+    
+    **For Existing Projects:**
+    - Navigate to your project
+    - Click "Edit Project" in the project settings
+  </Step>
+  
+  <Step title="Add Database Connection">
+    In the project form, locate the "Database Connections" section and click "Add Connection".
+    
+    Fill in the connection details:
+    
+    <ParamField path="title" type="string" required>
+      A friendly name for this connection (e.g., "Production DB", "Analytics")
+    </ParamField>
+    
+    <ParamField path="host" type="string" required>
+      The database server hostname or IP address (e.g., `localhost`, `db.example.com`)
+    </ParamField>
+    
+    <ParamField path="port" type="number" required>
+      PostgreSQL port number (default: `5432`)
+    </ParamField>
+    
+    <ParamField path="database" type="string" required>
+      The database name to connect to
+    </ParamField>
+    
+    <ParamField path="user" type="string" required>
+      Database username with read permissions
+    </ParamField>
+    
+    <ParamField path="password" type="string" required>
+      Database password (encrypted before storage)
+    </ParamField>
+  </Step>
+  
+  <Step title="Save and Validate">
+    When you save the project, VizBoard will:
+    
+    1. **Encrypt credentials** using AES-256 (`src/app/actions/project/crud.ts:57-64`)
+    2. **Validate connection** by attempting to connect to the database
+    3. **Introspect schema** to discover tables and columns
+    4. **Store schema** in the database for quick access
+    
+    If the connection is invalid, you'll see a badge indicating the issue.
+  </Step>
+  
+  <Step title="Connection Ready">
+    Once validated, the connection is ready to use in widgets. A green badge will indicate the connection is valid.
+  </Step>
+</Steps>
+
+### Connection Form Example
+
+Here's an example of a valid PostgreSQL connection:
+
+```json
+{
+  "title": "Analytics Database",
+  "host": "analytics.example.com",
+  "port": 5432,
+  "database": "analytics_prod",
+  "user": "readonly_user",
+  "password": "your-secure-password"
+}
+```
+
+<Warning>
+  Use a **read-only database user** whenever possible. VizBoard only needs SELECT permissions to visualize data.
+</Warning>
+
+## How Connections Are Stored
+
+Database connections are stored securely in the `dbconnections` table.
+
+### Database Schema
+
+```prisma
+model DbConnection {
+  id                  String    @id @default(uuid())
+  projectId           String
+  title               String
+  dbAccess            Json      // Encrypted credentials
+  dbSchema            Json?     // Cached schema
+  lastIntrospectionAt DateTime?
+  createdAt           DateTime  @default(now())
+  updatedAt           DateTime  @updatedAt
+  isValid             Boolean?  // Connection validation status
+  validationError     String?   // Error message if invalid
+  project             Project   @relation(...)
+}
+```
+
+### Credential Encryption
+
+Credentials are encrypted before storage (`src/app/actions/project/crud.ts:57-65`):
+
+```typescript
+const encryptedAccess = encrypt(
+  JSON.stringify({
+    host: conn.host,
+    port: conn.port,
+    database: conn.database,
+    user: conn.user,
+    password: conn.password,
+  })
+)
+
+await tx.dbConnection.create({
+  data: {
+    projectId: createdProject.id,
+    title: conn.title,
+    dbAccess: encryptedAccess,
+  },
+})
+```
+
+The `encrypt()` function uses AES-256 encryption with a secret key from environment variables.
+
+## Connection Validation
+
+After creating or updating connections, VizBoard automatically validates them.
+
+### Validation Process
+
+<Steps>
+  <Step title="Connection Test">
+    VizBoard attempts to establish a connection to the database using the provided credentials.
+  </Step>
+  
+  <Step title="Update Status">
+    The `isValid` field is updated:
+    - `true` - Connection successful
+    - `false` - Connection failed
+    - `null` - Not yet validated
+  </Step>
+  
+  <Step title="Store Error (if any)">
+    If validation fails, the error message is stored in `validationError` for debugging.
+  </Step>
+</Steps>
+
+### Validation Code Reference
+
+Connections are validated silently after creation (`src/app/actions/project/crud.ts:80-89`):
+
+```typescript
+const validationResult = await validateConnectionsQuietly(
+  project.id,
+  input.userId
+)
+
+if (validationResult?.success) {
+  const validConnections = validationResult.connectionStatuses.filter(
+    (conn) => conn.isValid
+  )
+  // Proceed with schema introspection
+}
+```
+
+## Schema Introspection
+
+For valid connections, VizBoard automatically introspects the database schema.
+
+### What is Introspected
+
+- **Tables**: All tables in the database
+- **Columns**: Column names, data types, and constraints
+- **Primary Keys**: Identified for each table
+- **Foreign Keys**: Relationships between tables
+
+### Introspection Flow
+
+<Steps>
+  <Step title="Trigger Introspection">
+    After successful validation, VizBoard calls `CreateDbSchema(connectionId)` for each valid connection.
+  </Step>
+  
+  <Step title="Fetch Schema">
+    The function makes a request to `/api/createschema` which:
+    - Connects to the database
+    - Queries `information_schema` tables
+    - Builds a complete schema representation
+  </Step>
+  
+  <Step title="Store Schema">
+    The schema is stored as JSON in the `dbSchema` field with a timestamp in `lastIntrospectionAt`.
+  </Step>
+  
+  <Step title="Cache for Widgets">
+    Widgets use this cached schema to display available tables and columns without querying the database.
+  </Step>
+</Steps>
+
+### Schema Introspection Code
+
+From `src/app/actions/project/database.ts:3-42`:
+
+```typescript
+export default async function CreateDbSchema(connectionId: string) {
+  const response = await fetch(
+    `${process.env.NEXTAUTH_URL}/api/createschema`,
+    {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ connectionId }),
+    }
+  )
+  
+  if (!response.ok) {
+    throw new Error(`API call failed with status ${response.status}`)
+  }
+  
+  const result = await response.json()
+  return result.tables
+}
+```
+
+### Auto-Introspection
+
+Schema introspection happens automatically in these scenarios:
+
+1. **When creating a project** with new connections
+2. **When updating a project** and adding/modifying connections
+3. **When manually regenerating schemas** via the UI
+
+<Note>
+  Introspection runs in parallel for multiple connections to improve performance (`src/app/actions/project/crud.ts:102-134`).
+</Note>
+
+## Managing Connections
+
+### Updating a Connection
+
+<Steps>
+  <Step title="Edit Project">
+    Navigate to your project and click "Edit Project".
+  </Step>
+  
+  <Step title="Modify Connection">
+    Update any connection fields as needed. For security, the password field is always blank in the edit form.
+    
+    To keep the existing password, leave the password field as `KEEP_CURRENT_PASSWORD`.
+  </Step>
+  
+  <Step title="Save Changes">
+    Click "Update Project". VizBoard will:
+    - Re-encrypt updated credentials
+    - Re-validate the connection
+    - Re-introspect the schema if valid
+  </Step>
+</Steps>
+
+### Password Management
+
+When editing connections, passwords are handled specially (`src/app/actions/project/crud.ts:258-281`):
+
+```typescript
+if (conn.password === "KEEP_CURRENT_PASSWORD") {
+  // Fetch existing connection and decrypt password
+  const existingConnection = existingConnectionsMap.get(conn.id)
+  const existingDbAccess = decrypt(existingConnection.dbAccess)
+  const existingConfig = JSON.parse(existingDbAccess)
+  finalPassword = existingConfig.password
+}
+```
+
+This ensures you don't need to re-enter passwords when updating other connection details.
+
+### Deleting a Connection
+
+To remove a connection from a project:
+
+<Steps>
+  <Step title="Edit Project">
+    Go to the project edit page.
+  </Step>
+  
+  <Step title="Remove Connection">
+    Click the delete/remove button next to the connection you want to remove.
+  </Step>
+  
+  <Step title="Save Changes">
+    Save the project. The connection will be permanently deleted (`src/app/actions/project/crud.ts:247-254`).
+  </Step>
+</Steps>
+
+<Warning>
+  Deleting a connection will break any widgets that depend on it. Ensure no widgets are using the connection before removing it.
+</Warning>
+
+## Regenerating Schemas
+
+If your database schema changes (new tables, columns, etc.), you can regenerate the cached schema.
+
+### Manual Regeneration
+
+<Steps>
+  <Step title="Navigate to Project">
+    Go to your project dashboard.
+  </Step>
+  
+  <Step title="Open Settings">
+    Click the project settings or options menu.
+  </Step>
+  
+  <Step title="Regenerate Schemas">
+    Click "Regenerate Schemas" or similar option.
+  </Step>
+  
+  <Step title="Wait for Completion">
+    VizBoard will re-introspect all valid connections and update the cached schemas.
+  </Step>
+</Steps>
+
+### Programmatic Regeneration
+
+The `regenerateProjectSchemas` function handles schema regeneration (`src/app/actions/project/crud.ts:685-782`):
+
+```typescript
+export async function regenerateProjectSchemas(
+  projectId: string,
+  userId: string
+) {
+  const project = await prisma.project.findFirst({
+    where: { id: projectId, userId },
+    include: {
+      dbconnections: {
+        where: { isValid: true },
+      },
+    },
+  })
+  
+  // Regenerate schemas for all valid connections
+  for (const connection of project.dbconnections) {
+    await CreateDbSchema(connection.id)
+  }
+}
+```
+
+## Multiple Connections Per Project
+
+VizBoard supports multiple database connections in a single project.
+
+### Use Cases
+
+<CardGroup cols={2}>
+  <Card title="Multi-Database Analytics" icon="chart-mixed">
+    Connect to multiple databases (e.g., production, staging) and create widgets from each
+  </Card>
+  
+  <Card title="Cross-Database Dashboards" icon="table-pivot">
+    Build dashboards that pull data from different sources (e.g., sales DB, inventory DB)
+  </Card>
+  
+  <Card title="Read Replicas" icon="clone">
+    Connect to read replicas to reduce load on primary databases
+  </Card>
+  
+  <Card title="Data Warehouse + App DB" icon="warehouse">
+    Combine data from your application database and data warehouse
+  </Card>
+</CardGroup>
+
+### Widget-Connection Association
+
+Each widget specifies which connection to use via the `connectionId` field in its configuration.
+
+```typescript
+const configs = {
+  connectionId: "abc-123",  // Specific connection
+  tableName: "users",
+  // ... other config
+}
+```
+
+If no `connectionId` is specified, widgets use the first available connection in the project.
+
+## Troubleshooting
+
+### Connection Validation Fails
+
+**Symptoms:** Red badge on connection, `isValid: false`
+
+**Solutions:**
+- Verify hostname, port, and database name are correct
+- Check that the database user has SELECT permissions
+- Ensure the database server allows connections from VizBoard's IP
+- Check firewall rules and network security groups
+- Verify password is correct (try connecting with `psql` or another client)
+
+### Schema Introspection Fails
+
+**Symptoms:** Connection valid but `dbSchema` is null
+
+**Solutions:**
+- Check that the user has permissions to query `information_schema`
+- Verify the database contains tables
+- Try regenerating schemas manually
+- Check server logs for detailed error messages
+
+### Connection Errors in Widgets
+
+**Symptoms:** Widgets show "Unable to load data"
+
+**Solutions:**
+- Ensure the connection is valid (green badge)
+- Verify the table name exists in the database
+- Check that schema introspection completed successfully
+- Regenerate schemas if database structure changed
+
+### "No valid connections" Error
+
+**Symptoms:** Cannot make project public
+
+**Context:** Projects require at least one valid connection to be made public.
+
+**Solutions:**
+- Fix any invalid connections in the project
+- Ensure at least one connection has `isValid: true`
+- Re-validate connections by editing and saving the project
+
+## Security Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Use Read-Only Users" icon="eye">
+    Create database users with SELECT-only permissions for VizBoard connections
+  </Card>
+  
+  <Card title="Limit Network Access" icon="network-wired">
+    Use IP whitelisting or VPN to restrict database access
+  </Card>
+  
+  <Card title="Rotate Credentials" icon="rotate">
+    Periodically update database passwords and update connections
+  </Card>
+  
+  <Card title="Monitor Access" icon="chart-line">
+    Enable database audit logs to track query activity
+  </Card>
+</CardGroup>
+
+## Environment Variables
+
+Required for database connection encryption:
+
+```bash
+# Encryption key for database credentials
+ENCRYPTION_KEY=your-32-character-secret-key
+
+# Application URL for schema introspection API
+NEXTAUTH_URL=http://localhost:3000
+```
+
+<Warning>
+  Never commit the `ENCRYPTION_KEY` to version control. Use environment variable management tools like Doppler, AWS Secrets Manager, or similar.
+</Warning>

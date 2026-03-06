@@ -1,0 +1,221 @@
+---
+title: 'Widget API Routes'
+description: 'HTTP endpoints for fetching widget data'
+---
+
+## Get Widget by ID
+
+<ParamField path="widgetId" type="string" required>
+  The ID of the widget to retrieve
+</ParamField>
+
+### Request
+
+```http
+GET /api/widgets/{widgetId}
+```
+
+### Authentication
+
+Requires an active session. Users can only access widgets from their own projects.
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the operation was successful
+</ResponseField>
+
+<ResponseField name="widget" type="object">
+  The widget object containing all configuration and data
+  
+  <ResponseField name="id" type="string">
+    Unique widget identifier
+  </ResponseField>
+  
+  <ResponseField name="projectId" type="string">
+    ID of the project this widget belongs to
+  </ResponseField>
+  
+  <ResponseField name="type" type="string">
+    Widget type (e.g., "DataTable", "Chart", "TextBlock")
+  </ResponseField>
+  
+  <ResponseField name="subtype" type="string | null">
+    Widget subtype for specialized configurations
+  </ResponseField>
+  
+  <ResponseField name="title" type="string">
+    Widget title
+  </ResponseField>
+  
+  <ResponseField name="description" type="string | null">
+    Optional widget description
+  </ResponseField>
+  
+  <ResponseField name="configs" type="object">
+    Widget-specific configuration object (varies by widget type)
+  </ResponseField>
+  
+  <ResponseField name="query" type="string | null">
+    SQL query for data-driven widgets
+  </ResponseField>
+  
+  <ResponseField name="connectionId" type="string | null">
+    ID of the database connection used by this widget
+  </ResponseField>
+  
+  <ResponseField name="createdAt" type="string">
+    ISO timestamp of widget creation
+  </ResponseField>
+  
+  <ResponseField name="updatedAt" type="string">
+    ISO timestamp of last widget update
+  </ResponseField>
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+```javascript fetch
+const response = await fetch('/api/widgets/widget_abc123', {
+  method: 'GET',
+  credentials: 'include'
+});
+
+const data = await response.json();
+```
+
+```bash cURL
+curl -X GET "https://yourapp.com/api/widgets/widget_abc123" \
+  -H "Cookie: session=..." 
+```
+</CodeGroup>
+
+<CodeGroup>
+```json 200 Success - DataTable Widget
+{
+  "success": true,
+  "widget": {
+    "id": "widget_abc123",
+    "projectId": "proj_xyz789",
+    "type": "DataTable",
+    "subtype": null,
+    "title": "Sales Report",
+    "description": "Monthly sales data",
+    "configs": {
+      "columns": [
+        { "field": "product", "header": "Product" },
+        { "field": "sales", "header": "Sales" }
+      ],
+      "pagination": true,
+      "pageSize": 10
+    },
+    "query": "SELECT product, sales FROM monthly_sales WHERE year = 2026",
+    "connectionId": "conn_def456",
+    "createdAt": "2026-03-01T10:00:00.000Z",
+    "updatedAt": "2026-03-05T14:30:00.000Z"
+  }
+}
+```
+
+```json 200 Success - Chart Widget
+{
+  "success": true,
+  "widget": {
+    "id": "widget_xyz456",
+    "projectId": "proj_xyz789",
+    "type": "Chart",
+    "subtype": "bar",
+    "title": "Revenue Trends",
+    "description": "Quarterly revenue comparison",
+    "configs": {
+      "chartType": "bar",
+      "xAxis": "quarter",
+      "yAxis": "revenue",
+      "colors": ["#ee6d2d", "#36ab56"]
+    },
+    "query": "SELECT quarter, revenue FROM quarterly_revenue",
+    "connectionId": "conn_def456",
+    "createdAt": "2026-03-02T11:00:00.000Z",
+    "updatedAt": "2026-03-06T09:15:00.000Z"
+  }
+}
+```
+
+```json 200 Success - TextBlock Widget
+{
+  "success": true,
+  "widget": {
+    "id": "widget_text123",
+    "projectId": "proj_xyz789",
+    "type": "TextBlock",
+    "subtype": null,
+    "title": "Dashboard Overview",
+    "description": null,
+    "configs": {
+      "content": "# Welcome to Sales Dashboard\n\nThis dashboard shows Q4 2025 sales metrics.",
+      "format": "markdown"
+    },
+    "query": null,
+    "connectionId": null,
+    "createdAt": "2026-03-01T09:00:00.000Z",
+    "updatedAt": "2026-03-01T09:00:00.000Z"
+  }
+}
+```
+
+```json 400 Missing Widget ID
+{
+  "error": "Widget ID is required"
+}
+```
+
+```json 401 Unauthorized
+{
+  "error": "Unauthorized"
+}
+```
+
+```json 404 Not Found
+{
+  "error": "Widget not found"
+}
+```
+
+```json 500 Server Error
+{
+  "error": "Internal server error"
+}
+```
+</CodeGroup>
+
+<Note>
+  Users can only access widgets that belong to projects they own. The API checks project ownership through the session user ID.
+</Note>
+
+---
+
+## Widget Management via Server Actions
+
+While the HTTP API only provides read access to widgets, widget creation, updates, and deletion are handled through Next.js Server Actions:
+
+### Available Server Actions
+
+<Card title="upsertWidgetAction" icon="pen-to-square" href="/api/actions/widgets#upsert-widget">
+  Create a new widget or update an existing one
+</Card>
+
+<Card title="deleteWidgetAction" icon="trash" href="/api/actions/widgets#delete-widget">
+  Delete a widget by ID
+</Card>
+
+### Why Server Actions?
+
+VizBoard uses Next.js Server Actions for write operations (create, update, delete) because they provide:
+
+- Built-in CSRF protection
+- Seamless integration with React Server Components
+- Automatic revalidation of cached data
+- Type-safe function calls from the client
+
+For more information on widget CRUD operations, see the [Widget Server Actions documentation](/api/actions/widgets).

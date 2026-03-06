@@ -1,0 +1,521 @@
+---
+title: Docker Setup
+description: Configure Docker Compose to run multiple PostgreSQL databases for VizBoard development
+---
+
+VizBoard uses Docker Compose to orchestrate multiple PostgreSQL database containers for development. This guide covers the complete Docker setup and configuration.
+
+## Overview
+
+The Docker Compose configuration provisions **4 separate PostgreSQL databases**:
+
+1. **vizboard_main** - Main application database (users, projects, widgets)
+2. **vizboard_test1** - Test database for widget development
+3. **vizboard_test2** - Test database for widget development
+4. **vizboard_test3** - Test database for widget development
+
+<Note>
+The main database stores VizBoard's internal data, while test databases serve as external data sources you can connect to from within the application to test visualization widgets.
+</Note>
+
+## Prerequisites
+
+<Steps>
+
+<Step title="Install Docker">
+
+Download and install Docker Desktop for your platform:
+
+- **macOS/Windows**: [Docker Desktop](https://www.docker.com/products/docker-desktop)
+- **Linux**: [Docker Engine](https://docs.docker.com/engine/install/)
+
+Verify installation:
+```bash
+docker --version
+docker-compose --version
+```
+
+</Step>
+
+<Step title="Verify Docker is Running">
+
+Ensure Docker daemon is running:
+```bash
+docker ps
+```
+
+You should see an empty list or existing containers (not an error message).
+
+</Step>
+
+</Steps>
+
+## Docker Compose Configuration
+
+VizBoard includes a complete `docker-compose.yml` file in the project root:
+
+<CodeGroup>
+
+```yaml docker-compose.yml
+version: "3.8"
+
+services:
+  db_main:
+    image: postgres:15
+    ports:
+      - "5432:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=vizboard_main
+    volumes:
+      - postgres_data_main:/var/lib/postgresql/data
+    networks:
+      - app-network
+
+  db_test1:
+    image: postgres:15
+    ports:
+      - "5433:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=testdbpass1234
+      - POSTGRES_DB=vizboard_test1
+    volumes:
+      - postgres_data_test1:/var/lib/postgresql/data
+    networks:
+      - app-network
+
+  db_test2:
+    image: postgres:15
+    ports:
+      - "5434:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=testdbpass1234
+      - POSTGRES_DB=vizboard_test2
+    volumes:
+      - postgres_data_test2:/var/lib/postgresql/data
+    networks:
+      - app-network
+
+  db_test3:
+    image: postgres:15
+    ports:
+      - "5435:5432"
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=testdbpass1234
+      - POSTGRES_DB=vizboard_test3
+    volumes:
+      - postgres_data_test3:/var/lib/postgresql/data
+    networks:
+      - app-network
+
+volumes:
+  postgres_data_main:
+  postgres_data_test1:
+  postgres_data_test2:
+  postgres_data_test3:
+
+networks:
+  app-network:
+    driver: bridge
+```
+
+</CodeGroup>
+
+## Database Configuration Details
+
+### Main Database (db_main)
+
+| Parameter | Value | Description |
+|-----------|-------|-------------|
+| **Image** | `postgres:15` | PostgreSQL version 15 |
+| **Port** | `5432:5432` | Standard PostgreSQL port |
+| **User** | `postgres` | Database superuser |
+| **Password** | `postgres` | Default development password |
+| **Database** | `vizboard_main` | Main application database |
+| **Volume** | `postgres_data_main` | Persistent data storage |
+
+**Connection String**:
+```
+postgresql://postgres:postgres@localhost:5432/vizboard_main?schema=public
+```
+
+<Warning>
+**Production Security**: Change the default password `postgres` in production environments. Use strong, unique passwords and consider using Docker secrets.
+</Warning>
+
+### Test Database 1 (db_test1)
+
+| Parameter | Value | Description |
+|-----------|-------|-------------|
+| **Image** | `postgres:15` | PostgreSQL version 15 |
+| **Port** | `5433:5432` | Mapped to host port 5433 |
+| **User** | `postgres` | Database superuser |
+| **Password** | `testdbpass1234` | Test database password |
+| **Database** | `vizboard_test1` | E-commerce store data |
+| **Volume** | `postgres_data_test1` | Persistent data storage |
+
+**Connection String**:
+```
+postgresql://postgres:testdbpass1234@localhost:5433/vizboard_test1
+```
+
+### Test Database 2 (db_test2)
+
+| Parameter | Value | Description |
+|-----------|-------|-------------|
+| **Image** | `postgres:15` | PostgreSQL version 15 |
+| **Port** | `5434:5432` | Mapped to host port 5434 |
+| **User** | `postgres` | Database superuser |
+| **Password** | `testdbpass1234` | Test database password |
+| **Database** | `vizboard_test2` | E-commerce store data |
+| **Volume** | `postgres_data_test2` | Persistent data storage |
+
+**Connection String**:
+```
+postgresql://postgres:testdbpass1234@localhost:5434/vizboard_test2
+```
+
+### Test Database 3 (db_test3)
+
+| Parameter | Value | Description |
+|-----------|-------|-------------|
+| **Image** | `postgres:15` | PostgreSQL version 15 |
+| **Port** | `5435:5432` | Mapped to host port 5435 |
+| **User** | `postgres` | Database superuser |
+| **Password** | `testdbpass1234` | Test database password |
+| **Database** | `vizboard_test3` | Business client/order data |
+| **Volume** | `postgres_data_test3` | Persistent data storage |
+
+**Connection String**:
+```
+postgresql://postgres:testdbpass1234@localhost:5435/vizboard_test3
+```
+
+## Start Docker Containers
+
+<Steps>
+
+<Step title="Start All Databases">
+
+Navigate to the VizBoard project root and start all containers:
+
+```bash
+docker-compose up -d
+```
+
+The `-d` flag runs containers in detached mode (background).
+
+<Note>
+First run downloads the PostgreSQL 15 image (~100MB). Subsequent starts are nearly instant.
+</Note>
+
+</Step>
+
+<Step title="Verify Containers Are Running">
+
+Check container status:
+
+```bash
+docker ps
+```
+
+You should see 4 containers running:
+```
+CONTAINER ID   IMAGE         PORTS                    NAMES
+abc123def456   postgres:15   0.0.0.0:5432->5432/tcp   vizboard-db_main-1
+def456ghi789   postgres:15   0.0.0.0:5433->5432/tcp   vizboard-db_test1-1
+ghi789jkl012   postgres:15   0.0.0.0:5434->5432/tcp   vizboard-db_test2-1
+jkl012mno345   postgres:15   0.0.0.0:5435->5432/tcp   vizboard-db_test3-1
+```
+
+</Step>
+
+<Step title="View Container Logs">
+
+Check logs for any startup errors:
+
+```bash
+# View all container logs
+docker-compose logs
+
+# View logs for a specific database
+docker-compose logs db_main
+docker-compose logs db_test1
+
+# Follow logs in real-time
+docker-compose logs -f
+```
+
+Successful startup shows:
+```
+database system is ready to accept connections
+```
+
+</Step>
+
+</Steps>
+
+## Docker Management Commands
+
+### Common Operations
+
+<CodeGroup>
+
+```bash Start/Stop
+# Start all containers
+docker-compose up -d
+
+# Stop all containers (preserves data)
+docker-compose stop
+
+# Stop and remove containers (preserves data in volumes)
+docker-compose down
+
+# Stop, remove containers, and delete volumes (deletes all data)
+docker-compose down -v
+```
+
+```bash Logs
+# View logs from all containers
+docker-compose logs
+
+# View logs from specific container
+docker-compose logs db_main
+
+# Follow logs in real-time
+docker-compose logs -f db_test1
+
+# View last 50 lines
+docker-compose logs --tail=50
+```
+
+```bash Container Management
+# List running containers
+docker ps
+
+# List all containers (including stopped)
+docker ps -a
+
+# Restart all containers
+docker-compose restart
+
+# Restart specific container
+docker-compose restart db_main
+
+# Remove stopped containers
+docker-compose rm
+```
+
+```bash Volumes
+# List all volumes
+docker volume ls
+
+# Inspect volume details
+docker volume inspect vizboard_postgres_data_main
+
+# Remove unused volumes
+docker volume prune
+
+# Remove specific volume (container must be stopped)
+docker volume rm vizboard_postgres_data_main
+```
+
+</CodeGroup>
+
+## Connect to Databases
+
+### Using psql (PostgreSQL CLI)
+
+<CodeGroup>
+
+```bash Main Database
+# Connect to main database
+docker exec -it vizboard-db_main-1 psql -U postgres -d vizboard_main
+
+# Common psql commands:
+\dt          # List all tables
+\d+ users   # Describe users table
+\l          # List all databases
+\q          # Quit psql
+```
+
+```bash Test Database 1
+# Connect to test database 1
+docker exec -it vizboard-db_test1-1 psql -U postgres -d vizboard_test1
+
+# Query data:
+SELECT COUNT(*) FROM users;
+SELECT * FROM products LIMIT 10;
+```
+
+```bash Test Database 2
+# Connect to test database 2
+docker exec -it vizboard-db_test2-1 psql -U postgres -d vizboard_test2
+```
+
+```bash Test Database 3
+# Connect to test database 3
+docker exec -it vizboard-db_test3-1 psql -U postgres -d vizboard_test3
+
+# Query business data:
+SELECT COUNT(*) FROM clients;
+SELECT * FROM commandes LIMIT 10;
+```
+
+</CodeGroup>
+
+### Using Database Tools
+
+Connect using GUI tools like **pgAdmin**, **DBeaver**, or **TablePlus**:
+
+<Card title="Main Database Connection" icon="database">
+- **Host**: `localhost`
+- **Port**: `5432`
+- **Database**: `vizboard_main`
+- **Username**: `postgres`
+- **Password**: `postgres`
+</Card>
+
+<Card title="Test Database Connections" icon="database">
+**Test1**: `localhost:5433` / `vizboard_test1` / `postgres` / `testdbpass1234`  
+**Test2**: `localhost:5434` / `vizboard_test2` / `postgres` / `testdbpass1234`  
+**Test3**: `localhost:5435` / `vizboard_test3` / `postgres` / `testdbpass1234`
+</Card>
+
+## Data Persistence
+
+### Docker Volumes
+
+Database data is stored in Docker volumes that persist across container restarts:
+
+- `postgres_data_main` - Main database data
+- `postgres_data_test1` - Test database 1 data
+- `postgres_data_test2` - Test database 2 data
+- `postgres_data_test3` - Test database 3 data
+
+<Note>
+Stopping or removing containers does **not** delete volume data. Data persists until you explicitly remove volumes with `docker-compose down -v` or `docker volume rm`.
+</Note>
+
+### Backup and Restore
+
+<CodeGroup>
+
+```bash Backup Database
+# Backup main database to file
+docker exec vizboard-db_main-1 pg_dump -U postgres vizboard_main > backup_main.sql
+
+# Backup test database
+docker exec vizboard-db_test1-1 pg_dump -U postgres vizboard_test1 > backup_test1.sql
+
+# Backup with compression
+docker exec vizboard-db_main-1 pg_dump -U postgres vizboard_main | gzip > backup_main.sql.gz
+```
+
+```bash Restore Database
+# Restore from backup
+cat backup_main.sql | docker exec -i vizboard-db_main-1 psql -U postgres vizboard_main
+
+# Restore from compressed backup
+gunzip -c backup_main.sql.gz | docker exec -i vizboard-db_main-1 psql -U postgres vizboard_main
+```
+
+</CodeGroup>
+
+## Networking
+
+All containers are connected to a custom bridge network (`app-network`), allowing them to communicate with each other using service names:
+
+- Containers can reach each other using hostnames: `db_main`, `db_test1`, etc.
+- The application connects to `localhost` from the host machine
+- All containers are isolated from other Docker networks
+
+<Note>
+If you need to connect VizBoard running in Docker to these databases, use the service name (e.g., `db_main`) instead of `localhost` in the connection string.
+</Note>
+
+## Troubleshooting
+
+### Port Already in Use
+
+If you see errors like `port 5432 is already allocated`:
+
+1. Check what's using the port:
+   ```bash
+   lsof -i :5432  # macOS/Linux
+   netstat -ano | findstr :5432  # Windows
+   ```
+
+2. Stop the conflicting service or change the port in `docker-compose.yml`:
+   ```yaml
+   ports:
+     - "5442:5432"  # Use port 5442 instead
+   ```
+
+### Container Won't Start
+
+Check container logs for errors:
+```bash
+docker-compose logs db_main
+```
+
+Common issues:
+- Insufficient memory allocated to Docker
+- Corrupted volume data (try `docker-compose down -v` and restart)
+- Port conflicts (see above)
+
+### Cannot Connect from Application
+
+Verify:
+1. Containers are running: `docker ps`
+2. Correct port in `DATABASE_URL` environment variable
+3. Firewall isn't blocking ports 5432-5435
+4. Docker Desktop is running (macOS/Windows)
+
+### Data Not Persisting
+
+Ensure you're not using `docker-compose down -v` which deletes volumes. Use `docker-compose stop` or `docker-compose down` (without `-v`) to preserve data.
+
+### Clean Slate
+
+To completely reset all databases:
+```bash
+# Stop and remove everything
+docker-compose down -v
+
+# Restart fresh
+docker-compose up -d
+
+# Reapply migrations and seeds
+npm run db:migrate
+npm run seed:test-dbs
+```
+
+## Production Considerations
+
+<Warning>
+This Docker Compose configuration is designed for **development only**. For production:
+
+- Use managed database services (AWS RDS, Google Cloud SQL, etc.)
+- Implement proper backup and disaster recovery
+- Use strong, unique passwords and secrets management
+- Enable SSL/TLS for all database connections
+- Configure proper resource limits (CPU, memory)
+- Implement monitoring and alerting
+- Use read replicas for high availability
+- Regularly update PostgreSQL to latest stable version
+</Warning>
+
+## Next Steps
+
+<Card title="Initialize Database Schema" icon="table">
+With Docker containers running, proceed to:
+
+1. [Run Prisma migrations](/development/database-setup) to create tables
+2. [Seed test databases](/development/database-setup#seeding-test-data) with sample data
+3. Start the development server: `npm run dev`
+</Card>

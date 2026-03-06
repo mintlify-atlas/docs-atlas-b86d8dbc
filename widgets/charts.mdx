@@ -1,0 +1,371 @@
+---
+title: Charts
+description: Visualize your data with bar, line, area, and pie charts with powerful aggregation options
+icon: chart-line
+---
+
+Chart widgets allow you to create interactive visualizations from your database tables. VizBoard supports bar charts, line charts, area charts, and pie charts with automatic data aggregation and grouping capabilities.
+
+## Supported Chart Types
+
+<CardGroup cols={2}>
+  <Card title="Bar Charts" icon="chart-column">
+    **Type:** `bar_charts`  
+    **Subtype:** `basic_bar`
+    
+    Compare values across categories with vertical bars
+  </Card>
+  <Card title="Line Charts" icon="chart-line">
+    **Type:** `line_charts`  
+    **Subtype:** `basic_line`
+    
+    Show trends over time or continuous data
+  </Card>
+  <Card title="Area Charts" icon="chart-area">
+    **Type:** `area_charts`  
+    **Subtype:** `basic_area`
+    
+    Display cumulative trends with filled areas
+  </Card>
+  <Card title="Pie Charts" icon="chart-pie">
+    **Type:** `pie_charts`  
+    **Subtype:** `basic_pie`
+    
+    Show proportions and percentages
+  </Card>
+</CardGroup>
+
+## Configuration
+
+### Required Fields
+
+All chart widgets require the following configuration:
+
+1. **Connection** - Database connection to query
+2. **Table** - Single table to visualize
+3. **X-Axis Column** - Category/label column (non-numeric)
+4. **Y-Axis Columns** - One or more numeric value columns
+5. **Title** - Descriptive chart name (required)
+
+### Configuration Object
+
+```typescript
+interface ChartConfig {
+  connectionId?: string      // Database connection ID
+  tableName: string           // Table name
+  xAxisColumn: string         // Column for categories/labels
+  yAxisColumns: string[]      // Numeric columns for values
+  chartType: "bar" | "line" | "area" | "pie"
+  groupXAxis?: boolean        // Enable grouping by X-axis
+  groupAggregation?: "sum" | "average"  // Aggregation method
+  expanded?: boolean          // Widget size (desktop only)
+}
+```
+
+## Examples
+
+### Basic Bar Chart
+
+```json
+{
+  "type": "bar_charts",
+  "subtype": "basic_bar",
+  "title": "Sales by Region",
+  "description": "Total sales amount by geographic region",
+  "configs": {
+    "connectionId": "conn_123abc",
+    "tableName": "sales",
+    "xAxisColumn": "region",
+    "yAxisColumns": ["total_amount"],
+    "chartType": "bar"
+  }
+}
+```
+
+### Multi-Series Line Chart
+
+```json
+{
+  "type": "line_charts",
+  "subtype": "basic_line",
+  "title": "Revenue vs Expenses",
+  "configs": {
+    "connectionId": "conn_123abc",
+    "tableName": "monthly_financials",
+    "xAxisColumn": "month",
+    "yAxisColumns": ["revenue", "expenses", "profit"],
+    "chartType": "line"
+  }
+}
+```
+
+### Area Chart with Grouping
+
+```json
+{
+  "type": "area_charts",
+  "subtype": "basic_area",
+  "title": "Average Order Value by Category",
+  "configs": {
+    "connectionId": "conn_123abc",
+    "tableName": "orders",
+    "xAxisColumn": "product_category",
+    "yAxisColumns": ["order_value"],
+    "chartType": "area",
+    "groupXAxis": true,
+    "groupAggregation": "average"
+  }
+}
+```
+
+### Chart with Sum Aggregation
+
+```json
+{
+  "type": "bar_charts",
+  "subtype": "basic_bar",
+  "title": "Total Inventory by Warehouse",
+  "configs": {
+    "connectionId": "conn_123abc",
+    "tableName": "inventory",
+    "xAxisColumn": "warehouse_name",
+    "yAxisColumns": ["quantity"],
+    "chartType": "bar",
+    "groupXAxis": true,
+    "groupAggregation": "sum"
+  }
+}
+```
+
+## Aggregation Options
+
+<Tabs>
+  <Tab title="No Grouping">
+    **Default Behavior**
+    
+    When `groupXAxis` is `false` or not specified:
+    - Each row in your table becomes a data point
+    - If multiple rows have the same X-axis value, they appear as separate points
+    - Best for: Pre-aggregated data or when you want to show individual records
+    
+    ```json
+    {
+      "groupXAxis": false
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Sum Aggregation">
+    **Group and Sum Values**
+    
+    When `groupXAxis` is `true` and `groupAggregation` is `"sum"`:
+    - Rows with the same X-axis value are combined
+    - Y-axis values are summed together
+    - Best for: Totals, cumulative amounts, counts
+    
+    ```json
+    {
+      "groupXAxis": true,
+      "groupAggregation": "sum"
+    }
+    ```
+    
+    **Example:** If you have multiple sales records for "East" region, they'll be summed into one bar showing total sales for East.
+  </Tab>
+  
+  <Tab title="Average Aggregation">
+    **Group and Average Values**
+    
+    When `groupXAxis` is `true` and `groupAggregation` is `"average"`:
+    - Rows with the same X-axis value are combined
+    - Y-axis values are averaged
+    - Best for: Mean values, typical amounts, performance metrics
+    
+    ```json
+    {
+      "groupXAxis": true,
+      "groupAggregation": "average"
+    }
+    ```
+    
+    **Example:** Multiple order values for "Electronics" category will be averaged to show the typical order value.
+  </Tab>
+</Tabs>
+
+## Data Requirements
+
+### X-Axis Column (Categories)
+
+<Note>
+The X-axis column must contain **non-numeric** data (text/string values).
+</Note>
+
+Supported types:
+- String
+- Text
+- VARCHAR
+- CHAR
+- Date (displayed as formatted strings)
+
+The configuration dialog automatically filters to show only non-numeric columns for X-axis selection.
+
+### Y-Axis Columns (Values)
+
+<Note>
+Y-axis columns must contain **numeric** data.
+</Note>
+
+Supported types:
+- INTEGER
+- BIGINT
+- DECIMAL
+- NUMERIC
+- REAL
+- DOUBLE PRECISION
+- SMALLINT
+- INT
+- FLOAT
+- NUMBER
+
+You can select multiple Y-axis columns to create multi-series charts.
+
+## Features
+
+<CardGroup cols={2}>
+  <Card title="Interactive Tooltips" icon="info-circle">
+    Hover over data points to see detailed values
+  </Card>
+  <Card title="Legend" icon="list">
+    Automatically generated legend for multi-series charts
+  </Card>
+  <Card title="Responsive Design" icon="mobile">
+    Charts adapt to container size and screen width
+  </Card>
+  <Card title="Expand/Collapse" icon="expand">
+    Desktop users can expand charts to double width (2 columns)
+  </Card>
+  <Card title="Data Refresh" icon="arrows-rotate">
+    Manual refresh button to reload chart data
+  </Card>
+  <Card title="Color Coding" icon="palette">
+    Automatic color assignment for multiple series
+  </Card>
+</CardGroup>
+
+## Chart-Specific Behavior
+
+### Bar Charts
+- Best for comparing discrete categories
+- Supports multiple Y-axis columns (grouped bars)
+- Vertical orientation
+- Grid lines for easy value reading
+
+### Line Charts
+- Ideal for showing trends over time
+- Multiple lines for different metrics
+- Smooth curve option available
+- Connected data points
+
+### Area Charts
+- Similar to line charts with filled areas
+- Shows cumulative effect visually
+- Supports stacked areas for multiple series
+- Great for showing volume or magnitude
+
+### Pie Charts
+- Shows proportional relationships
+- Best with single Y-axis column
+- Displays percentages automatically
+- Interactive segment highlighting
+
+<Warning>
+Pie charts are best suited for datasets with a limited number of categories (5-10 max) to maintain readability.
+</Warning>
+
+## Usage Tips
+
+<AccordionGroup>
+  <Accordion title="Choosing the right chart type">
+    - **Bar charts**: Comparing categories, rankings, discrete data
+    - **Line charts**: Time series, trends, continuous data
+    - **Area charts**: Cumulative trends, volume over time
+    - **Pie charts**: Proportions, percentages, parts of a whole
+  </Accordion>
+  
+  <Accordion title="When to use grouping">
+    Enable `groupXAxis` when:
+    - Your data has duplicate X-axis values that need combining
+    - You're showing raw transaction data that needs aggregation
+    - You want to see totals or averages per category
+    
+    Keep it disabled when:
+    - Your data is already aggregated
+    - You want to see individual data points
+    - Each row represents a unique category
+  </Accordion>
+  
+  <Accordion title="Multiple Y-axis columns">
+    Use multiple Y-axis columns to:
+    - Compare related metrics (revenue vs expenses)
+    - Show multiple dimensions of the same category
+    - Create multi-series visualizations
+    
+    Limit to 3-5 series for readability. Too many series can make charts cluttered.
+  </Accordion>
+  
+  <Accordion title="Performance considerations">
+    - Charts load all data at once (no pagination)
+    - Large datasets (>1000 rows) may impact performance
+    - Use database views or aggregated tables for better performance
+    - Consider grouping to reduce data points
+  </Accordion>
+</AccordionGroup>
+
+## Data Transformation
+
+The chart widget automatically transforms your database data:
+
+1. **Validation**: Filters out rows with invalid or missing values
+2. **Type Conversion**: Converts string numbers to numeric values
+3. **Grouping**: Optionally groups by X-axis value
+4. **Aggregation**: Applies sum or average to grouped data
+5. **Normalization**: Ensures all values are finite numbers
+
+Source: `src/components/dashboard/widgets/charts/utils/dataTransformer.ts`
+
+## Expanded View
+
+On desktop (XL breakpoint), charts can be expanded to double width:
+
+```typescript
+// Stored in widget configuration
+{
+  "configs": {
+    // ... other config
+    "expanded": true  // Chart spans 2 columns
+  }
+}
+```
+
+Users can toggle expansion using the chevron button in the widget header. The preference is automatically saved.
+
+## Source Code Reference
+
+Chart widget implementation:
+- Configuration: `src/components/dashboard/widgets/charts/chartConfig.tsx:57-792`
+- Widget Rendering: `src/components/dashboard/widgets/charts/chartWidget.tsx:31-289`
+- Bar Chart: `src/components/dashboard/widgets/charts/barChart.tsx`
+- Line Chart: `src/components/dashboard/widgets/charts/lineChart.tsx`
+- Area Chart: `src/components/dashboard/widgets/charts/areaChart.tsx`
+- Data Transformer: `src/components/dashboard/widgets/charts/utils/dataTransformer.ts:3-176`
+
+## Related Widgets
+
+<CardGroup cols={2}>
+  <Card title="Simple Datatables" icon="table" href="./datatables">
+    View the raw data behind your charts
+  </Card>
+  <Card title="Integrated Datatables" icon="link" href="./integrated-datatables">
+    Compare data across multiple databases
+  </Card>
+</CardGroup>

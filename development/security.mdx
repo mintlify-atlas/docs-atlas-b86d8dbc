@@ -1,0 +1,331 @@
+---
+title: 'Security Overview'
+description: 'Authentication, authorization, and security best practices in VizBoard'
+---
+
+## Authentication
+
+VizBoard implements a robust authentication system using **NextAuth.js v5** with multiple authentication strategies.
+
+### Authentication Providers
+
+VizBoard supports three authentication methods:
+
+<CardGroup cols={3}>
+  <Card title="Credentials" icon="key">
+    Email and password authentication with bcrypt hashing
+  </Card>
+  <Card title="Google OAuth" icon="google">
+    OAuth 2.0 authentication via Google
+  </Card>
+  <Card title="GitHub OAuth" icon="github">
+    OAuth 2.0 authentication via GitHub
+  </Card>
+</CardGroup>
+
+### Session Management
+
+Sessions are managed using **JWT (JSON Web Tokens)** with the following configuration:
+
+```typescript src/lib/auth/auth.ts
+session: {
+  strategy: "jwt",
+  maxAge: 30 * 24 * 60 * 60, // 30 days
+}
+```
+
+<Note>
+JWT sessions are stateless and don't require database lookups on every request, improving performance while maintaining security.
+</Note>
+
+### Password Security
+
+Passwords are hashed using **bcrypt** with a salt rounds value of 10:
+
+<CodeGroup>
+```typescript Sign Up (src/app/actions/auth/signUp.ts)
+const hashedPassword = await bcrypt.hash(password, 10)
+
+await prisma.user.create({
+  data: {
+    firstName,
+    lastName,
+    email,
+    password: hashedPassword,
+    name: fullName,
+  },
+})
+```
+
+```typescript Password Verification (src/lib/auth/auth.ts)
+const passwordsMatch = await bcrypt.compare(
+  inputPassword,
+  user.password
+)
+
+if (passwordsMatch) {
+  return {
+    id: user.id,
+    email: user.email,
+    name: user.name,
+    firstName: user.firstName ?? "",
+    lastName: user.lastName ?? "",
+  }
+}
+```
+</CodeGroup>
+
+<Warning>
+Never store plain-text passwords. Always use bcrypt or similar one-way hashing algorithms with appropriate salt rounds.
+</Warning>
+
+## Authorization
+
+### Route Protection
+
+VizBoard uses NextAuth middleware to protect routes automatically:
+
+```typescript src/app/middleware.ts
+export { auth as middleware } from "@/lib/auth/auth"
+```
+
+This middleware runs on every request and ensures users are authenticated before accessing protected routes.
+
+### API Route Authorization
+
+API routes verify user sessions and enforce ownership-based access control:
+
+```typescript src/app/api/widgets/[widgetId]/route.ts
+const session = await auth()
+if (!session?.user?.id) {
+  return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+}
+
+const widget = await prisma.widget.findFirst({
+  where: {
+    id: widgetId,
+    project: {
+      userId: session.user.id, // Ownership check
+    },
+  },
+})
+```
+
+<Note>
+Every resource query includes a `userId` check to ensure users can only access their own data.
+</Note>
+
+### Server Action Authorization
+
+Server actions verify both project existence and user ownership:
+
+```typescript src/app/actions/project/validation.ts
+const project = await prisma.project.findFirst({
+  where: { id: projectId, userId },
+  include: {
+    dbconnections: true,
+  },
+})
+
+if (!project) {
+  return { success: false, error: "Project not found or unauthorized" }
+}
+```
+
+## Input Validation
+
+### Schema Validation with Zod
+
+All user inputs are validated using **Zod** schemas before processing:
+
+<CodeGroup>
+```typescript Login Schema (src/lib/auth/authSchema.ts)
+export const LoginSchema = z.object({
+  email: z.string().email({
+    message: "Please enter a valid email address",
+  }),
+  password: z.string().min(8, {
+    message: "Password must be at least 8 characters long",
+  }),
+})
+```
+
+```typescript Signup Schema (src/lib/auth/authSchema.ts)
+export const SignupSchema = z
+  .object({
+    firstName: z.string().min(1, {
+      message: "First Name is required",
+    }),
+    lastName: z.string().min(1, {
+      message: "Last Name is required",
+    }),
+    email: z.string().email({
+      message: "Please enter a valid email address",
+    }),
+    password: z.string().min(8, {
+      message: "Password must be at least 8 characters long",
+    }),
+    repassword: z.string().min(8, {
+      message: "Password must be at least 8 characters long",
+    }),
+  })
+  .refine((data) => data.password === data.repassword, {
+    message: "Passwords must match",
+    path: ["repassword"],
+  })
+```
+</CodeGroup>
+
+### Validation in Server Actions
+
+```typescript src/app/actions/project/validation.ts
+if (!projectId || typeof projectId !== "string") {
+  return {
+    success: false,
+    error: "Valid project ID is required",
+  }
+}
+
+if (!userId || typeof userId !== "string") {
+  return {
+    success: false,
+    error: "Valid user ID is required",
+  }
+}
+```
+
+## Environment Variables
+
+### Required Security Variables
+
+VizBoard requires the following environment variables for secure operation:
+
+| Variable | Purpose | Format |
+|----------|---------|--------|
+| `ENCRYPTION_KEY` | AES-256-GCM encryption key for database credentials | 64-character hex string (32 bytes) |
+| `AUTH_GOOGLE_ID` | Google OAuth client ID | String |
+| `AUTH_GOOGLE_SECRET` | Google OAuth client secret | String |
+| `AUTH_GITHUB_ID` | GitHub OAuth client ID | String |
+| `AUTH_GITHUB_SECRET` | GitHub OAuth client secret | String |
+| `NEXTAUTH_URL` | Base URL for authentication callbacks | URL |
+| `NEXTAUTH_SECRET` | Secret for signing tokens | String |
+
+<Warning>
+**Critical Security Requirements:**
+- Never commit `.env` files to version control
+- Use different encryption keys for development and production
+- Rotate secrets regularly
+- Use strong, randomly generated values for all secrets
+</Warning>
+
+### Environment Variable Validation
+
+The application validates required environment variables at startup:
+
+```typescript src/lib/crypto/crypto.ts
+const ENCRYPTION_KEY_HEX = process.env.ENCRYPTION_KEY
+
+if (!ENCRYPTION_KEY_HEX) {
+  throw new Error("Missing ENCRYPTION_KEY environment variable. It should be a 64-char hexadecimal string.")
+}
+
+const ENCRYPTION_KEY = Buffer.from(ENCRYPTION_KEY_HEX, 'hex')
+
+if (ENCRYPTION_KEY.length !== 32) {
+  throw new Error(`ENCRYPTION_KEY must be 32 bytes (64 hex characters) long. Current length: ${ENCRYPTION_KEY.length} bytes.`)
+}
+```
+
+```typescript src/lib/auth/auth.ts
+if (!process.env.AUTH_GOOGLE_ID || !process.env.AUTH_GOOGLE_SECRET) {
+  throw new Error("Missing environment variables for Google OAuth")
+}
+if (!process.env.AUTH_GITHUB_ID || !process.env.AUTH_GITHUB_SECRET) {
+  throw new Error("Missing environment variables for Github OAuth")
+}
+```
+
+## Security Best Practices
+
+### 1. Data Encryption
+
+<Card title="Sensitive Data Protection" icon="lock">
+  All database credentials are encrypted at rest using AES-256-GCM. See the [Encryption](/development/encryption) page for implementation details.
+</Card>
+
+### 2. Error Handling
+
+Avoid leaking sensitive information in error messages:
+
+```typescript src/lib/auth/auth.ts
+if (!user) {
+  if (process.env.NODE_ENV !== "production") {
+    console.error(
+      "Login with credentials failed: User not found with email:",
+      inputEmail
+    )
+  }
+  throw new Error(ERROR_INVALID_CREDENTIALS) // Generic error message
+}
+```
+
+<Note>
+Detailed error logs are only shown in development. Production returns generic error messages to prevent information disclosure.
+</Note>
+
+### 3. OAuth vs Credentials
+
+The system prevents credential-based login for OAuth users:
+
+```typescript src/lib/auth/auth.ts
+if (!user.password) {
+  throw new Error(
+    "This email is registered with Google or GitHub. Please try signing in with them."
+  )
+}
+```
+
+### 4. Session Token Management
+
+JWT tokens are refreshed on each request and include user data:
+
+```typescript src/lib/auth/auth.ts
+async jwt({ token, user, account }) {
+  if (user) {
+    token.id = user.id
+    token.email = user.email
+    token.name = user.name
+    token.firstName = user.firstName
+    token.lastName = user.lastName
+    token.sub = user.id
+  } else if (token.id) {
+    // Verify user still exists in database
+    const dbUser = await prisma.user.findUnique({
+      where: { id: token.id as string },
+    })
+    if (!dbUser) {
+      return null // Invalidate token
+    }
+  }
+  return token
+}
+```
+
+### 5. Email Normalization
+
+All email addresses are normalized to lowercase to prevent duplicate accounts:
+
+```typescript src/app/actions/auth/signUp.ts
+const email = data.email.toLowerCase()
+```
+
+## Related Documentation
+
+<CardGroup cols={2}>
+  <Card title="Encryption" icon="shield" href="/development/encryption">
+    Learn about AES-256-GCM encryption for database credentials
+  </Card>
+  <Card title="API Development" icon="code" href="/development/api">
+    Build secure API endpoints with proper authorization
+  </Card>
+</CardGroup>

@@ -1,0 +1,546 @@
+---
+title: Architecture
+description: VizBoard's Next.js App Router architecture, server components, and server actions
+---
+
+## Overview
+
+VizBoard is built on **Next.js 15.3.2** with the App Router, leveraging modern React 19 features including Server Components, Server Actions, and streaming. The architecture follows a clear separation between server-side data operations and client-side interactions.
+
+## Core Architecture Patterns
+
+### Next.js App Router Structure
+
+The application uses Next.js App Router with route groups for logical organization:
+
+<CodeGroup>
+
+```plaintext Route Groups
+src/app/
+├── (auth)/              # Authentication routes (login, signup)
+├── (homepage)/          # Public homepage
+├── projects/            # Project management UI
+│   └── [projectId]/
+│       └── dashboard/   # Dashboard view
+├── public/              # Public dashboard sharing
+│   └── [idPublic]/
+├── settings/            # User settings
+├── actions/             # Server Actions
+└── api/                 # API Routes
+```
+
+</CodeGroup>
+
+<Note>
+Route groups like `(auth)` and `(homepage)` allow for shared layouts without affecting the URL structure.
+</Note>
+
+### Server Components by Default
+
+VizBoard maximizes the use of React Server Components (RSC) for optimal performance:
+
+- **Pages are Server Components** - All route pages default to server rendering
+- **Data fetching happens on the server** - Direct database queries via Prisma
+- **Reduced client bundle** - Only interactive components are client-side
+- **Automatic code splitting** - Each route loads only necessary code
+
+<Accordion title="Example: Dashboard Page Server Component">
+
+```typescript src/app/projects/[projectId]/dashboard/page.tsx
+export default async function DashboardPage({
+  params,
+}: {
+  params: Promise<{ projectId: string }>
+}) {
+  const session = await auth()
+  const { projectId } = await params
+  
+  // Direct database query in Server Component
+  const project = await prisma.project.findUnique({
+    where: { id: projectId },
+    include: {
+      widgets: true,
+      dbconnections: true,
+    },
+  })
+  
+  return <DashboardLayout project={project} />
+}
+```
+
+</Accordion>
+
+### Server Actions
+
+VizBoard uses Server Actions for all data mutations, providing type-safe server-side operations:
+
+<CardGroup cols={2}>
+
+<Card title="Authentication Actions" icon="user-lock">
+Located in `src/app/actions/auth/`
+- User registration
+- Credential validation
+- Password hashing with bcrypt
+</Card>
+
+<Card title="Project Actions" icon="folder">
+Located in `src/app/actions/project/`
+- CRUD operations
+- Connection management
+- Schema introspection
+- Validation
+</Card>
+
+<Card title="Dashboard Actions" icon="chart-line">
+Located in `src/app/actions/dashboard/`
+- Widget CRUD
+- Widget ordering
+- Data fetching
+- Table queries
+</Card>
+
+<Card title="User Actions" icon="user">
+Located in `src/app/actions/user/`
+- Profile updates
+- Settings management
+</Card>
+
+</CardGroup>
+
+<Accordion title="Example: Server Action with Validation">
+
+```typescript src/app/actions/project/crud.ts
+"use server"
+
+import { auth } from "@/lib/auth/auth"
+import { encrypt } from "@/lib/crypto/crypto"
+import prisma from "@/lib/db/prisma"
+import { validateProject } from "@/lib/projects/schemas"
+import { revalidatePath } from "next/cache"
+
+export async function createProjectWithConnections(input) {
+  // 1. Authentication check
+  const session = await auth()
+  if (!session?.user) {
+    redirect("/login")
+  }
+  
+  // 2. Input validation with Zod
+  const validationResult = validateProject(input)
+  if (!validationResult.success) {
+    return { success: false, error: validationResult.error }
+  }
+  
+  // 3. Database transaction
+  const project = await prisma.$transaction(async (tx) => {
+    const createdProject = await tx.project.create({
+      data: { ...validatedData }
+    })
+    
+    // Encrypt and save connections
+    for (const conn of connections) {
+      const encryptedAccess = encrypt(JSON.stringify(conn))
+      await tx.dbConnection.create({
+        data: { projectId: createdProject.id, dbAccess: encryptedAccess }
+      })
+    }
+    
+    return createdProject
+  })
+  
+  // 4. Revalidate cached paths
+  revalidatePath("/projects")
+  
+  return { success: true, projectId: project.id }
+}
+```
+
+</Accordion>
+
+## Authentication Architecture
+
+### NextAuth.js v5 Integration
+
+VizBoard uses NextAuth.js v5 (beta) with multiple authentication strategies:
+
+<CodeGroup>
+
+```typescript JWT Strategy
+session: {
+  strategy: "jwt",
+  maxAge: 30 * 24 * 60 * 60, // 30 days
+}
+```
+
+```typescript Providers
+providers: [
+  Google({ clientId, clientSecret }),
+  GitHub({ clientId, clientSecret }),
+  Credentials({
+    authorize: async (credentials) => {
+      // Custom validation with bcrypt
+      const user = await prisma.user.findUnique()
+      const valid = await bcrypt.compare(password, user.password)
+      return valid ? user : null
+    }
+  })
+]
+```
+
+```typescript Prisma Adapter
+import { PrismaAdapter } from "@auth/prisma-adapter"
+
+const adapter = PrismaAdapter(prisma)
+```
+
+</CodeGroup>
+
+**Key Features:**
+- JWT-based sessions for stateless authentication
+- OAuth integration (Google, GitHub)
+- Credentials-based login with hashed passwords
+- Prisma adapter for user/account storage
+- Custom callbacks for token enrichment
+
+## Database Architecture
+
+### Dual Database Pattern
+
+VizBoard employs a unique dual database architecture:
+
+<CardGroup cols={2}>
+
+<Card title="Application Database" icon="database">
+**Prisma + PostgreSQL**
+
+Stores:
+- Users & accounts
+- Projects & widgets
+- Connection metadata (encrypted)
+- Schema cache
+</Card>
+
+<Card title="External Databases" icon="plug">
+**Knex.js + PostgreSQL**
+
+Connects to:
+- User's external PostgreSQL databases
+- Dynamic query execution
+- Schema introspection
+- Real-time data fetching
+</Card>
+
+</CardGroup>
+
+### Connection Encryption
+
+All external database credentials are encrypted using **AES-256-GCM**:
+
+```typescript lib/crypto/crypto.ts
+import crypto from 'crypto'
+
+const ENCRYPTION_KEY = Buffer.from(process.env.ENCRYPTION_KEY!, 'base64')
+
+export function encrypt(text: string): string {
+  const iv = crypto.randomBytes(16)
+  const cipher = crypto.createCipheriv('aes-256-gcm', ENCRYPTION_KEY, iv)
+  
+  let encrypted = cipher.update(text, 'utf8', 'hex')
+  encrypted += cipher.final('hex')
+  const authTag = cipher.getAuthTag()
+  
+  return `${iv.toString('hex')}:${authTag.toString('hex')}:${encrypted}`
+}
+```
+
+### Schema Introspection
+
+VizBoard automatically introspects external database schemas using `knex-schema-inspector`:
+
+<Accordion title="Auto-Introspection Flow">
+
+1. **Connection Validation** - Test connection on creation/update
+2. **Schema Discovery** - Extract tables, columns, types, relationships
+3. **Cache Storage** - Store schema JSON in `dbConnection.dbSchema`
+4. **Timestamp Tracking** - Update `lastIntrospectionAt`
+5. **Widget Configuration** - Use cached schema for UI dropdowns
+
+```typescript
+const inspector = schemaInspector(knexConnection)
+const tables = await inspector.tables()
+const columns = await inspector.columnInfo(tableName)
+
+await prisma.dbConnection.update({
+  where: { id: connectionId },
+  data: {
+    dbSchema: JSON.stringify({ tables, columns }),
+    lastIntrospectionAt: new Date(),
+    isValid: true,
+  }
+})
+```
+
+</Accordion>
+
+## State Management
+
+### Layered State Architecture
+
+VizBoard uses different state management strategies for different needs:
+
+<CardGroup cols={3}>
+
+<Card title="Server State" icon="server">
+**Server Components + SWR**
+
+For:
+- Projects list
+- Widget data
+- User profile
+
+Benefits:
+- Automatic revalidation
+- Cache management
+- Loading states
+</Card>
+
+<Card title="Client State" icon="react">
+**Zustand Stores**
+
+For:
+- Widget dialog forms
+- Project draft state
+- UI preferences
+
+Benefits:
+- Lightweight
+- No boilerplate
+- DevTools support
+</Card>
+
+<Card title="Form State" icon="clipboard">
+**React Hook Form**
+
+For:
+- Project forms
+- Widget configuration
+- Settings forms
+
+Benefits:
+- Validation with Zod
+- Performance
+- Error handling
+</Card>
+
+</CardGroup>
+
+### Zustand Store Examples
+
+<CodeGroup>
+
+```typescript Widget Dialog Store
+// src/store/dashboard/widgetDialogStore.ts
+import { create } from 'zustand'
+
+interface WidgetDialogStore {
+  isOpen: boolean
+  widgetType: string | null
+  editingWidget: Widget | null
+  openDialog: (type: string) => void
+  closeDialog: () => void
+}
+
+export const useWidgetDialog = create<WidgetDialogStore>((set) => ({
+  isOpen: false,
+  widgetType: null,
+  editingWidget: null,
+  openDialog: (type) => set({ isOpen: true, widgetType: type }),
+  closeDialog: () => set({ isOpen: false, editingWidget: null }),
+}))
+```
+
+```typescript Project Draft Store
+// src/store/projects/projectDraftStore.ts
+import { create } from 'zustand'
+import { persist } from 'zustand/middleware'
+
+export const useProjectDraft = create(
+  persist(
+    (set) => ({
+      draft: null,
+      saveDraft: (data) => set({ draft: data }),
+      clearDraft: () => set({ draft: null }),
+    }),
+    { name: 'project-draft' }
+  )
+)
+```
+
+</CodeGroup>
+
+### SWR Data Fetching
+
+For client-side data fetching and caching:
+
+```typescript hooks/projects/useProjectsWithStore.ts
+import useSWR from 'swr'
+
+const fetcher = (url: string) => fetch(url).then(r => r.json())
+
+export function useProjects() {
+  const { data, error, isLoading, mutate } = useSWR(
+    '/api/userprojects',
+    fetcher,
+    {
+      revalidateOnFocus: true,
+      refreshInterval: 30000, // 30 seconds
+    }
+  )
+  
+  return {
+    projects: data?.projects || [],
+    isLoading,
+    error,
+    refresh: mutate,
+  }
+}
+```
+
+## API Routes vs Server Actions
+
+### When to Use Each
+
+<Accordion title="Use Server Actions for:">
+
+- **Form submissions** - Direct form action integration
+- **Mutations** - Create, update, delete operations
+- **Authentication required** - Built-in session access
+- **Revalidation** - Automatic cache invalidation
+
+**Example:**
+```typescript
+<form action={createProject}>
+  <input name="title" />
+  <button type="submit">Create</button>
+</form>
+```
+
+</Accordion>
+
+<Accordion title="Use API Routes for:">
+
+- **Client-side fetching** - SWR/fetch integration
+- **Webhooks** - External service callbacks
+- **Public endpoints** - Shared dashboards
+- **Non-mutation queries** - Read-only data
+
+**Example:**
+```typescript
+GET /api/projects/[projectId]/dashboard
+GET /api/projects/[projectId]/public
+PATCH /api/widgets/[widgetId]
+```
+
+</Accordion>
+
+## Caching & Revalidation
+
+VizBoard uses Next.js 15's enhanced caching mechanisms:
+
+### Cache Strategies
+
+<CodeGroup>
+
+```typescript Static Generation (default)
+// Cached until revalidated
+export default async function ProjectsPage() {
+  const projects = await getProjects()
+  return <ProjectsList projects={projects} />
+}
+```
+
+```typescript Dynamic Rendering
+// Always fresh data
+import { cookies } from 'next/headers'
+
+export default async function DashboardPage() {
+  await cookies() // Opt into dynamic rendering
+  const data = await fetchDashboardData()
+  return <Dashboard data={data} />
+}
+```
+
+```typescript Revalidation
+// Invalidate cache after mutation
+import { revalidatePath, revalidateTag } from 'next/cache'
+
+export async function updateProject(data) {
+  await prisma.project.update({ ... })
+  
+  revalidatePath('/projects')
+  revalidatePath(`/projects/${data.id}`)
+}
+```
+
+</CodeGroup>
+
+## Security Architecture
+
+<CardGroup cols={2}>
+
+<Card title="Credential Encryption" icon="lock">
+- AES-256-GCM encryption
+- Unique IV per entry
+- Auth tags for integrity
+- Base64-encoded keys
+</Card>
+
+<Card title="Authentication" icon="shield">
+- JWT sessions (30 days)
+- bcrypt password hashing
+- OAuth with Google/GitHub
+- Server-side validation
+</Card>
+
+<Card title="Authorization" icon="user-shield">
+- Project ownership checks
+- Session validation per action
+- Prisma cascade deletes
+- User ID verification
+</Card>
+
+<Card title="Input Validation" icon="check-circle">
+- Zod schema validation
+- Type-safe Server Actions
+- SQL injection prevention
+- XSS protection
+</Card>
+
+</CardGroup>
+
+## Performance Optimizations
+
+### Database Level
+
+- **Connection pooling** - Reuse database connections
+- **Transactions** - Atomic operations with `prisma.$transaction`
+- **Select optimization** - Only fetch required fields
+- **Parallel introspection** - `Promise.allSettled` for multiple connections
+
+### Application Level
+
+- **Code splitting** - Route-based automatic splitting
+- **Server Components** - Zero client-side JavaScript for static content
+- **Streaming** - Progressive rendering with Suspense
+- **Image optimization** - Next.js automatic image optimization
+
+### Client Level
+
+- **SWR caching** - Reduce redundant API calls
+- **Debouncing** - Form inputs and search
+- **Lazy loading** - Widget components loaded on demand
+- **Optimistic updates** - Instant UI feedback
+
+<Note>
+The combination of Server Components, Server Actions, and aggressive caching results in fast page loads and instant interactions.
+</Note>

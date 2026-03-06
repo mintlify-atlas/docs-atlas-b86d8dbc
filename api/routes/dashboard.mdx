@@ -1,0 +1,362 @@
+---
+title: 'Dashboard API Routes'
+description: 'HTTP endpoints for retrieving dashboard data and managing widget order'
+---
+
+## Get Project Dashboard Data
+
+<ParamField path="projectId" type="string" required>
+  The ID of the project whose dashboard data to retrieve
+</ParamField>
+
+### Request
+
+```http
+GET /api/projects/{projectId}/dashboard
+```
+
+### Authentication
+
+Requires an active session. Users can only access dashboard data for projects they own.
+
+### Response
+
+<ResponseField name="project" type="object">
+  Complete project information including connections
+  
+  <ResponseField name="id" type="string">
+    Project identifier
+  </ResponseField>
+  
+  <ResponseField name="title" type="string">
+    Project title
+  </ResponseField>
+  
+  <ResponseField name="description" type="string">
+    Project description
+  </ResponseField>
+  
+  <ResponseField name="isPublic" type="boolean">
+    Public visibility status
+  </ResponseField>
+  
+  <ResponseField name="idPublic" type="string | null">
+    Public sharing ID (null if not public)
+  </ResponseField>
+  
+  <ResponseField name="orderedWidgetIds" type="string[]">
+    Array of widget IDs in display order
+  </ResponseField>
+  
+  <ResponseField name="databases" type="array">
+    Array of decrypted database connection objects
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="schemas" type="object">
+  Map of connection IDs to their database schemas
+  
+  <ResponseField name="{connectionId}" type="object">
+    Database schema object for each valid connection
+    
+    <ResponseField name="tables" type="array">
+      Array of table definitions with columns and relationships
+    </ResponseField>
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="widgets" type="array">
+  Array of all widgets in the project
+  
+  <ResponseField name="id" type="string">
+    Widget identifier
+  </ResponseField>
+  
+  <ResponseField name="projectId" type="string">
+    Parent project ID
+  </ResponseField>
+  
+  <ResponseField name="type" type="string">
+    Widget type
+  </ResponseField>
+  
+  <ResponseField name="title" type="string">
+    Widget title
+  </ResponseField>
+  
+  <ResponseField name="configs" type="object">
+    Widget configuration
+  </ResponseField>
+  
+  <ResponseField name="query" type="string | null">
+    SQL query (if applicable)
+  </ResponseField>
+  
+  <ResponseField name="connectionId" type="string | null">
+    Associated database connection
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="connections" type="array">
+  Array of database connection objects (same as project.databases)
+</ResponseField>
+
+<ResponseField name="orderedWidgetIds" type="string[]">
+  Array of widget IDs in their display order
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+```javascript fetch
+const response = await fetch('/api/projects/proj_abc123/dashboard', {
+  method: 'GET',
+  credentials: 'include'
+});
+
+const data = await response.json();
+```
+
+```bash cURL
+curl -X GET "https://yourapp.com/api/projects/proj_abc123/dashboard" \
+  -H "Cookie: session=..." 
+```
+</CodeGroup>
+
+<CodeGroup>
+```json 200 Success
+{
+  "project": {
+    "id": "proj_abc123",
+    "title": "Sales Dashboard",
+    "description": "Q4 2025 sales metrics",
+    "isPublic": false,
+    "idPublic": null,
+    "orderedWidgetIds": ["widget_1", "widget_2", "widget_3"],
+    "databases": [
+      {
+        "id": "conn_xyz789",
+        "title": "PostgreSQL Production",
+        "host": "db.example.com",
+        "port": 5432,
+        "database": "sales_db",
+        "user": "app_user",
+        "password": "",
+        "isExisting": true,
+        "status": "valid"
+      }
+    ]
+  },
+  "schemas": {
+    "conn_xyz789": {
+      "tables": [
+        {
+          "name": "sales",
+          "columns": [
+            { "name": "id", "type": "integer" },
+            { "name": "product", "type": "varchar" },
+            { "name": "amount", "type": "decimal" }
+          ]
+        }
+      ]
+    }
+  },
+  "widgets": [
+    {
+      "id": "widget_1",
+      "projectId": "proj_abc123",
+      "type": "DataTable",
+      "title": "Recent Sales",
+      "configs": { "pageSize": 10 },
+      "query": "SELECT * FROM sales ORDER BY created_at DESC",
+      "connectionId": "conn_xyz789"
+    }
+  ],
+  "connections": [
+    {
+      "id": "conn_xyz789",
+      "title": "PostgreSQL Production",
+      "host": "db.example.com",
+      "port": 5432,
+      "database": "sales_db",
+      "user": "app_user",
+      "password": "",
+      "isExisting": true,
+      "status": "valid"
+    }
+  ],
+  "orderedWidgetIds": ["widget_1", "widget_2", "widget_3"]
+}
+```
+
+```json 400 Missing Project ID
+{
+  "error": "Missing projectId"
+}
+```
+
+```json 401 Unauthorized
+{
+  "error": "Unauthorized"
+}
+```
+
+```json 404 Not Found
+{
+  "error": "Project not found"
+}
+```
+
+```json 500 Server Error
+{
+  "error": "Internal server error"
+}
+```
+</CodeGroup>
+
+<Note>
+  Database connection passwords are always returned as empty strings for security. The schemas object only includes connections that have been successfully validated and introspected.
+</Note>
+
+---
+
+## Update Widget Order
+
+<ParamField path="projectId" type="string" required>
+  The ID of the project whose widget order to update
+</ParamField>
+
+<ParamField body="orderedWidgetIds" type="string[]" required>
+  Array of widget IDs in the desired display order
+</ParamField>
+
+### Request
+
+```http
+PUT /api/projects/{projectId}/widgets/order
+```
+
+### Authentication
+
+Requires an active session. Only the project owner can update widget order.
+
+### Request Body
+
+```json
+{
+  "orderedWidgetIds": ["widget_3", "widget_1", "widget_2"]
+}
+```
+
+### Response
+
+<ResponseField name="success" type="boolean">
+  Indicates if the operation was successful
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+```javascript fetch
+const response = await fetch('/api/projects/proj_abc123/widgets/order', {
+  method: 'PUT',
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  credentials: 'include',
+  body: JSON.stringify({
+    orderedWidgetIds: ['widget_3', 'widget_1', 'widget_2']
+  })
+});
+
+const data = await response.json();
+```
+
+```bash cURL
+curl -X PUT "https://yourapp.com/api/projects/proj_abc123/widgets/order" \
+  -H "Content-Type: application/json" \
+  -H "Cookie: session=..." \
+  -d '{
+    "orderedWidgetIds": ["widget_3", "widget_1", "widget_2"]
+  }'
+```
+</CodeGroup>
+
+<CodeGroup>
+```json 200 Success
+{
+  "success": true
+}
+```
+
+```json 400 Missing Project ID
+{
+  "error": "Missing projectId"
+}
+```
+
+```json 400 Missing Widget IDs
+{
+  "error": "Missing orderedWidgetIds"
+}
+```
+
+```json 400 Invalid Format
+{
+  "error": "orderedWidgetIds must be an array"
+}
+```
+
+```json 401 Unauthorized
+{
+  "error": "Unauthorized"
+}
+```
+
+```json 500 Server Error
+{
+  "error": "Failed to update widget order"
+}
+```
+</CodeGroup>
+
+<Info>
+  The widget order determines how widgets are displayed on the project dashboard. The order is preserved in the project's `orderedWidgetIds` field.
+</Info>
+
+---
+
+## Use Cases
+
+### Loading a Dashboard
+
+To load a complete dashboard with all necessary data:
+
+1. Call `GET /api/projects/{projectId}/dashboard` to fetch:
+   - Project metadata and settings
+   - All widgets with their configurations
+   - Database schemas for building queries
+   - Widget display order
+
+2. Use the `orderedWidgetIds` array to display widgets in the correct order
+
+3. Reference the `schemas` object when building or editing SQL queries
+
+### Reordering Widgets
+
+When users drag and drop widgets to reorder them:
+
+1. Update the local state with the new order
+2. Call `PUT /api/projects/{projectId}/widgets/order` with the new `orderedWidgetIds` array
+3. The dashboard will reflect the new order on next load
+
+### Security Considerations
+
+<Warning>
+  All dashboard endpoints require authentication and verify project ownership. Users cannot access dashboard data for projects they don't own.
+</Warning>
+
+- Database credentials are encrypted in the database
+- Passwords are never returned in API responses (always empty strings)
+- Only validated database connections are included in schemas
+- SQL queries are executed server-side to prevent direct database access

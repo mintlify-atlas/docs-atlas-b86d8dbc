@@ -1,0 +1,784 @@
+---
+title: 'Widget Actions'
+description: 'Server actions for managing dashboard widgets'
+icon: 'grid-2'
+---
+
+## Overview
+
+Widget server actions handle CRUD operations for dashboard widgets, including creation, updates, deletion, reordering, and data retrieval for widget rendering.
+
+---
+
+## createWidget
+
+Creates a new widget and adds it to the project's widget order.
+
+```typescript
+export async function createWidget(
+  data: Prisma.WidgetCreateInput | Prisma.WidgetUncheckedCreateInput
+): Promise<Widget>
+```
+
+### Parameters
+
+<ParamField path="data" type="WidgetCreateInput" required>
+  Widget creation data following Prisma schema
+  
+  <ParamField path="data.projectId" type="string" required>
+    ID of the project this widget belongs to
+  </ParamField>
+  
+  <ParamField path="data.type" type="string" required>
+    Widget type (e.g., "chart", "table", "metric")
+    
+    Note: Type and subtype are automatically normalized via `extractWidgetTypeInfo`
+  </ParamField>
+  
+  <ParamField path="data.subtype" type="string">
+    Widget subtype (e.g., "bar", "line", "pie" for charts)
+  </ParamField>
+  
+  <ParamField path="data.title" type="string" required>
+    Widget title displayed in the dashboard
+  </ParamField>
+  
+  <ParamField path="data.configs" type="Record<string, unknown>">
+    Widget configuration object containing:
+    - Chart settings (axes, colors, legends)
+    - Data source configuration
+    - Display options
+    - Query parameters
+  </ParamField>
+</ParamField>
+
+### Response
+
+Returns the created `Widget` object with all fields populated.
+
+<ResponseField name="id" type="string">
+  Unique widget identifier
+</ResponseField>
+
+<ResponseField name="projectId" type="string">
+  Parent project ID
+</ResponseField>
+
+<ResponseField name="type" type="string">
+  Normalized widget type
+</ResponseField>
+
+<ResponseField name="subtype" type="string | null">
+  Normalized widget subtype
+</ResponseField>
+
+<ResponseField name="title" type="string">
+  Widget title
+</ResponseField>
+
+<ResponseField name="configs" type="object">
+  Widget configuration object
+</ResponseField>
+
+<ResponseField name="createdAt" type="Date">
+  Creation timestamp
+</ResponseField>
+
+<ResponseField name="updatedAt" type="Date">
+  Last update timestamp
+</ResponseField>
+
+### Behavior
+
+- **Type normalization**: Automatically normalizes `type` and `subtype` using `extractWidgetTypeInfo`
+- **Order management**: Automatically appends widget ID to project's `orderedWidgetIds` array
+- **Transaction safety**: Widget creation and order update occur in sequence
+
+### Example
+
+<CodeGroup>
+```typescript Usage
+import { createWidget } from '@/app/actions/dashboard/crudWidgets'
+
+const widget = await createWidget({
+  projectId: 'clx7890abc',
+  type: 'chart',
+  subtype: 'bar',
+  title: 'Monthly Revenue',
+  configs: {
+    dataSource: {
+      connectionId: 'conn_123',
+      table: 'sales',
+      xColumn: 'month',
+      yColumn: 'revenue'
+    },
+    display: {
+      showLegend: true,
+      showGrid: true,
+      colorScheme: 'blue'
+    }
+  }
+})
+
+console.log('Created widget:', widget.id)
+```
+
+```typescript Table Widget
+const tableWidget = await createWidget({
+  projectId: 'clx7890abc',
+  type: 'table',
+  title: 'Recent Orders',
+  configs: {
+    dataSource: {
+      connectionId: 'conn_123',
+      table: 'orders',
+      columns: ['id', 'customer', 'amount', 'date'],
+      orderBy: 'date',
+      limit: 50
+    }
+  }
+})
+```
+</CodeGroup>
+
+---
+
+## updateWidget
+
+Updates an existing widget's properties and configuration.
+
+```typescript
+export async function updateWidget(
+  data: Prisma.WidgetUpdateInput,
+  widgetId: string
+): Promise<Widget>
+```
+
+### Parameters
+
+<ParamField path="data" type="WidgetUpdateInput" required>
+  Widget update data (partial updates supported)
+  
+  <ParamField path="data.type" type="string">
+    New widget type
+  </ParamField>
+  
+  <ParamField path="data.subtype" type="string">
+    New widget subtype
+  </ParamField>
+  
+  <ParamField path="data.title" type="string">
+    New widget title
+  </ParamField>
+  
+  <ParamField path="data.configs" type="Record<string, unknown>">
+    New widget configuration (replaces existing configs completely)
+  </ParamField>
+</ParamField>
+
+<ParamField path="widgetId" type="string" required>
+  ID of the widget to update
+</ParamField>
+
+### Response
+
+Returns the updated `Widget` object.
+
+### Behavior
+
+- **Type normalization**: Automatically normalizes `type` and `subtype`
+- **Config replacement**: Configs are replaced entirely, not merged
+- **Partial updates**: Only provided fields are updated
+
+### Example
+
+<CodeGroup>
+```typescript Update Title
+import { updateWidget } from '@/app/actions/dashboard/crudWidgets'
+
+const updated = await updateWidget(
+  { title: 'Q1 Revenue Analysis' },
+  'widget_123'
+)
+```
+
+```typescript Update Configs
+const updated = await updateWidget(
+  {
+    configs: {
+      dataSource: {
+        connectionId: 'conn_123',
+        table: 'sales',
+        xColumn: 'quarter',
+        yColumn: 'revenue'
+      },
+      display: {
+        showLegend: false,
+        colorScheme: 'green'
+      }
+    }
+  },
+  'widget_123'
+)
+```
+</CodeGroup>
+
+<Warning>
+  The `configs` field replaces the entire configuration object. Include all required config properties when updating.
+</Warning>
+
+---
+
+## UpsertWidget
+
+Creates a new widget or updates an existing one based on whether a `widgetId` is provided.
+
+```typescript
+export async function UpsertWidget(
+  data: unknown,
+  widgetId?: string
+): Promise<Widget>
+```
+
+### Parameters
+
+<ParamField path="data" type="unknown" required>
+  Widget data (will be cast to `WidgetCreateInput` or `WidgetUpdateInput`)
+</ParamField>
+
+<ParamField path="widgetId" type="string">
+  Widget ID (if updating). Omit to create a new widget.
+</ParamField>
+
+### Response
+
+Returns the created or updated `Widget` object.
+
+### Example
+
+```typescript
+import { UpsertWidget } from '@/app/actions/dashboard/crudWidgets'
+
+// Create new widget
+const newWidget = await UpsertWidget({
+  projectId: 'clx7890abc',
+  type: 'chart',
+  title: 'Sales Chart',
+  configs: { /* ... */ }
+})
+
+// Update existing widget
+const updatedWidget = await UpsertWidget(
+  { title: 'Updated Sales Chart' },
+  'widget_123'
+)
+```
+
+---
+
+## upsertWidgetAction
+
+Server action wrapper for `UpsertWidget` (marked with `"use server"`).
+
+```typescript
+export async function upsertWidgetAction(
+  data: unknown,
+  widgetId?: string
+): Promise<Widget>
+```
+
+### Parameters
+
+Same as `UpsertWidget`.
+
+### Response
+
+Returns the created or updated `Widget` object.
+
+### Example
+
+```typescript
+import { upsertWidgetAction } from '@/app/actions/dashboard/upsertWidget'
+
+// Use in client components or server components
+const widget = await upsertWidgetAction(widgetData, widgetId)
+```
+
+<Info>
+  Use `upsertWidgetAction` in client components. Use `UpsertWidget` directly in server-side code.
+</Info>
+
+---
+
+## getWidgetById
+
+Retrieves a single widget by its ID.
+
+```typescript
+export async function getWidgetById(widgetId: string): Promise<Widget | null>
+```
+
+### Parameters
+
+<ParamField path="widgetId" type="string" required>
+  ID of the widget to retrieve
+</ParamField>
+
+### Response
+
+Returns a `Widget` object if found, or `null` if the widget doesn't exist.
+
+### Example
+
+```typescript
+import { getWidgetById } from '@/app/actions/dashboard/crudWidgets'
+
+const widget = await getWidgetById('widget_123')
+
+if (widget) {
+  console.log(`Widget: ${widget.title} (${widget.type})`)
+}
+```
+
+---
+
+## deleteWidget
+
+Deletes a widget and removes it from the project's widget order.
+
+```typescript
+export async function deleteWidget(widgetId: string): Promise<boolean>
+```
+
+### Parameters
+
+<ParamField path="widgetId" type="string" required>
+  ID of the widget to delete
+</ParamField>
+
+### Response
+
+Returns `true` if deletion was successful, or throws an error on failure.
+
+### Behavior
+
+- **Order cleanup**: Automatically removes widget ID from project's `orderedWidgetIds` array
+- **Cascade deletion**: Widget is permanently deleted from the database
+- **Error handling**: Throws error if widget not found or deletion fails
+
+### Example
+
+```typescript
+import { deleteWidget } from '@/app/actions/dashboard/crudWidgets'
+
+try {
+  await deleteWidget('widget_123')
+  console.log('Widget deleted successfully')
+} catch (error) {
+  console.error('Failed to delete widget:', error)
+}
+```
+
+---
+
+## deleteWidgetAction
+
+Server action wrapper for `deleteWidget` with structured error handling.
+
+```typescript
+export async function deleteWidgetAction(
+  widgetId: string
+): Promise<DeleteWidgetResponse>
+```
+
+### Parameters
+
+<ParamField path="widgetId" type="string" required>
+  ID of the widget to delete
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  Indicates if deletion was successful
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Error message (only when success is false)
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+```typescript Usage
+import { deleteWidgetAction } from '@/app/actions/dashboard/deleteWidget'
+
+const result = await deleteWidgetAction('widget_123')
+
+if (result.success) {
+  console.log('Widget deleted')
+} else {
+  console.error('Error:', result.error)
+}
+```
+
+```json Response (Success)
+{
+  "success": true
+}
+```
+
+```json Response (Error)
+{
+  "success": false,
+  "error": "Failed to delete widget"
+}
+```
+</CodeGroup>
+
+---
+
+## updateWidgetOrder
+
+Updates the order of widgets in a project's dashboard.
+
+```typescript
+export async function updateWidgetOrder(
+  projectId: string,
+  newOrder: string[]
+): Promise<UpdateOrderResponse>
+```
+
+### Parameters
+
+<ParamField path="projectId" type="string" required>
+  ID of the project to update widget order for
+</ParamField>
+
+<ParamField path="newOrder" type="string[]" required>
+  Array of widget IDs in the desired order
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  Indicates if order update was successful
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Error message (only when success is false)
+</ResponseField>
+
+### Behavior
+
+- **Complete replacement**: Replaces the entire `orderedWidgetIds` array
+- **No validation**: Does not verify widget IDs exist or belong to the project
+- **Persistence**: Immediately saves to database
+
+### Example
+
+<CodeGroup>
+```typescript Reorder Widgets
+import { updateWidgetOrder } from '@/app/actions/dashboard/updateWidgetOrder'
+
+// Move widget_789 to the front
+const result = await updateWidgetOrder(
+  'clx7890abc',
+  ['widget_789', 'widget_123', 'widget_456']
+)
+
+if (result.success) {
+  console.log('Widget order updated')
+}
+```
+
+```typescript Drag and Drop Handler
+const handleDragEnd = async (result: DropResult) => {
+  if (!result.destination) return
+  
+  const items = Array.from(widgetIds)
+  const [reordered] = items.splice(result.source.index, 1)
+  items.splice(result.destination.index, 0, reordered)
+  
+  await updateWidgetOrder(projectId, items)
+}
+```
+
+```json Response
+{
+  "success": true
+}
+```
+</CodeGroup>
+
+<Info>
+  Widget order is stored in the `Project.orderedWidgetIds` field as an array of widget IDs.
+</Info>
+
+---
+
+## GetTableData
+
+Retrieves data from a database table for widget rendering.
+
+```typescript
+export async function GetTableData(
+  encryptedDbAccess: string,
+  tableName: string
+): Promise<GetTableDataResponse>
+```
+
+### Parameters
+
+<ParamField path="encryptedDbAccess" type="string" required>
+  Encrypted database connection credentials (from `DbConnection.dbAccess`)
+</ParamField>
+
+<ParamField path="tableName" type="string" required>
+  Name of the table to query
+</ParamField>
+
+### Response
+
+<ResponseField name="data" type="Record<string, unknown>[]">
+  Array of table rows (only when success)
+  
+  Each row is an object with column names as keys. Values are normalized:
+  - Numeric types: `number` or `null`
+  - Other types: `string` or `null`
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Error message (only when error occurs)
+  
+  Possible errors:
+  - `"Missing database access or table name."`
+  - `"Table \"tableName\" could not be queried."`
+  - `"Failed to retrieve data for table tableName: {error}"`
+</ResponseField>
+
+### Behavior
+
+- **Connection pooling**: Uses `withKnexConnection` for automatic connection management
+- **Type normalization**: Converts all values to `string` or `number` based on column type
+- **Column introspection**: Automatically detects column types from database schema
+- **NULL handling**: Converts undefined and invalid values to `null`
+- **Special type handling**:
+  - Numeric types (int, float, decimal) → `number`
+  - Date types → ISO string
+  - Boolean → `"true"` or `"false"`
+  - All others → `string`
+
+### Example
+
+<CodeGroup>
+```typescript Usage
+import { GetTableData } from '@/app/actions/dashboard/getTableData'
+import { getProjectWithConnections } from '@/app/actions/project/crud'
+
+// Get connection credentials
+const project = await getProjectWithConnections(projectId, userId)
+const connection = project.data?.databases[0]
+
+if (connection) {
+  // Retrieve table data
+  const result = await GetTableData(
+    connection.dbAccess,
+    'sales'
+  )
+  
+  if (result.data) {
+    console.log(`Retrieved ${result.data.length} rows`)
+    console.log('Columns:', Object.keys(result.data[0]))
+  } else {
+    console.error('Error:', result.error)
+  }
+}
+```
+
+```typescript Widget Data Loading
+const loadWidgetData = async (widget: Widget) => {
+  const { connectionId, table } = widget.configs.dataSource
+  
+  // Get connection from database
+  const connection = await prisma.dbConnection.findUnique({
+    where: { id: connectionId },
+    select: { dbAccess: true }
+  })
+  
+  if (!connection) return { error: 'Connection not found' }
+  
+  // Load table data
+  return await GetTableData(connection.dbAccess, table)
+}
+```
+
+```json Response (Success)
+{
+  "data": [
+    {
+      "id": 1,
+      "customer": "Acme Corp",
+      "amount": 1250.50,
+      "date": "2024-01-15T10:30:00.000Z",
+      "status": "completed"
+    },
+    {
+      "id": 2,
+      "customer": "TechStart Inc",
+      "amount": 3500.00,
+      "date": "2024-01-16T14:20:00.000Z",
+      "status": "pending"
+    }
+  ]
+}
+```
+
+```json Response (Error)
+{
+  "error": "Failed to retrieve data for table orders: Connection refused"
+}
+```
+</CodeGroup>
+
+<Warning>
+  This action queries the database directly with `SELECT *`. Ensure proper database permissions and consider performance for large tables.
+</Warning>
+
+---
+
+## Type Definitions
+
+```typescript
+import type { Prisma, Widget } from '@prisma/client'
+
+// Widget input types
+type WidgetCreateInput = Prisma.WidgetCreateInput
+type WidgetUpdateInput = Prisma.WidgetUpdateInput
+type WidgetUncheckedCreateInput = Prisma.WidgetUncheckedCreateInput
+
+// Response types
+interface DeleteWidgetResponse {
+  success: boolean
+  error?: string
+}
+
+interface UpdateOrderResponse {
+  success: boolean
+  error?: string
+}
+
+interface GetTableDataResponse {
+  data?: Record<string, unknown>[]
+  error?: string
+}
+
+// Widget object structure
+interface Widget {
+  id: string
+  projectId: string
+  type: string
+  subtype: string | null
+  title: string
+  configs: Record<string, unknown>
+  createdAt: Date
+  updatedAt: Date
+}
+
+// Common widget config structures
+interface ChartWidgetConfigs {
+  dataSource: {
+    connectionId: string
+    table: string
+    xColumn: string
+    yColumn: string
+    aggregation?: 'sum' | 'avg' | 'count' | 'min' | 'max'
+  }
+  display: {
+    showLegend?: boolean
+    showGrid?: boolean
+    colorScheme?: string
+    orientation?: 'horizontal' | 'vertical'
+  }
+}
+
+interface TableWidgetConfigs {
+  dataSource: {
+    connectionId: string
+    table: string
+    columns: string[]
+    orderBy?: string
+    limit?: number
+  }
+}
+```
+
+---
+
+## Widget Configuration
+
+The `configs` field structure varies by widget type:
+
+<Tabs>
+  <Tab title="Chart Widget">
+    ```typescript
+    {
+      dataSource: {
+        connectionId: string      // DB connection ID
+        table: string             // Table name
+        xColumn: string           // X-axis column
+        yColumn: string           // Y-axis column
+        aggregation?: string      // 'sum', 'avg', 'count', etc.
+        filters?: Filter[]        // Optional filters
+      },
+      display: {
+        showLegend: boolean
+        showGrid: boolean
+        colorScheme: string       // 'blue', 'green', 'red', etc.
+        orientation: string       // 'horizontal' | 'vertical'
+      }
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Table Widget">
+    ```typescript
+    {
+      dataSource: {
+        connectionId: string      // DB connection ID
+        table: string             // Table name
+        columns: string[]         // Visible columns
+        orderBy?: string          // Sort column
+        orderDirection?: string   // 'asc' | 'desc'
+        limit?: number            // Row limit
+        filters?: Filter[]        // Optional filters
+      },
+      display: {
+        pageSize: number
+        showSearch: boolean
+        showPagination: boolean
+      }
+    }
+    ```
+  </Tab>
+  
+  <Tab title="Metric Widget">
+    ```typescript
+    {
+      dataSource: {
+        connectionId: string      // DB connection ID
+        table: string             // Table name
+        column: string            // Metric column
+        aggregation: string       // 'sum', 'avg', 'count', etc.
+        filters?: Filter[]        // Optional filters
+      },
+      display: {
+        format: string            // 'number', 'currency', 'percentage'
+        prefix?: string           // e.g., '$'
+        suffix?: string           // e.g., '%'
+        decimals?: number         // Decimal places
+      }
+    }
+    ```
+  </Tab>
+</Tabs>

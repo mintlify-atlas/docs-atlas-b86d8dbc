@@ -1,0 +1,533 @@
+---
+title: 'Sharing Projects'
+description: 'Make your dashboards public and share them with unique URLs'
+icon: 'share-nodes'
+---
+
+VizBoard projects can be made public, allowing anyone with the link to view your dashboards without authentication.
+
+## Overview
+
+By default, all projects are **private** and only accessible to the project owner. When you make a project public:
+
+- A unique, unguessable URL is generated
+- Anyone with the link can view the dashboard
+- No authentication is required for viewers
+- The dashboard is read-only (viewers cannot edit)
+- You can regenerate the link to revoke old access
+
+<Note>
+  **Requirements**: Projects must have at least one **valid database connection** to be made public. This ensures viewers can see live data.
+</Note>
+
+## Project Privacy States
+
+Projects exist in one of two states:
+
+### Private Projects
+
+```json
+{
+  "isPublic": false,
+  "idPublic": null
+}
+```
+
+- Only accessible to the project owner
+- Requires authentication to view
+- No public URL generated
+
+### Public Projects
+
+```json
+{
+  "isPublic": true,
+  "idPublic": "a8f3j2k9x7q1"
+}
+```
+
+- Accessible to anyone with the link
+- Public URL: `/public/a8f3j2k9x7q1`
+- 12-character random identifier (nanoid)
+
+## Making a Project Public
+
+You can toggle project visibility from the project dashboard.
+
+<Steps>
+  <Step title="Navigate to Your Project">
+    Go to your project dashboard by clicking the project from `/projects`.
+  </Step>
+  
+  <Step title="Open Share Dialog">
+    Click the "Share" button in the project header or settings menu.
+  </Step>
+  
+  <Step title="Enable Public Access">
+    Toggle the "Public Dashboard" switch to **ON**.
+    
+    The system will:
+    1. Verify at least one valid database connection exists
+    2. Generate a unique 12-character ID using nanoid
+    3. Update the project: `isPublic: true`, `idPublic: "abc123..."`
+    4. Display the public URL
+  </Step>
+  
+  <Step title="Copy and Share Link">
+    Click "Copy Public Link" to copy the URL to your clipboard.
+    
+    Share this link with anyone you want to grant access to your dashboard.
+  </Step>
+</Steps>
+
+### Share Dialog Implementation
+
+From `src/components/projects/dialogs/shareProjectDialog.tsx:36-159`:
+
+```typescript
+export function ShareProjectDialog({ project }) {
+  const handleSwitch = async (checked: boolean) => {
+    const res = await fetch(`/api/projects/${project.id}/public`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ public: checked }),
+    })
+    
+    const data = await res.json()
+    updateProject(project.id, {
+      isPublic: data.isPublic,
+      idPublic: data.idPublic,
+    })
+  }
+  
+  return (
+    <Dialog>
+      <Switch
+        checked={project.isPublic}
+        onCheckedChange={handleSwitch}
+      />
+      
+      {project.isPublic && (
+        <Input
+          readOnly
+          value={`${window.location.origin}/public/${project.idPublic}`}
+        />
+      )}
+    </Dialog>
+  )
+}
+```
+
+## Public Link Generation
+
+When you enable public access, VizBoard generates a unique identifier.
+
+### ID Generation Algorithm
+
+From `src/app/api/projects/[projectId]/public/route.ts:6-64`:
+
+```typescript
+import { nanoid } from "nanoid"
+
+export async function POST(req: NextRequest) {
+  const { projectId } = await params
+  const { public: makePublic } = await req.json()
+  
+  // Verify project ownership
+  const project = await prisma.project.findUnique({
+    where: { id: projectId, userId: session.user.id },
+    include: { dbconnections: true },
+  })
+  
+  // Count valid connections
+  const validConnections = project.dbconnections.filter(
+    (conn) => conn.isValid === true
+  ).length
+  
+  let isPublic = makePublic
+  let idPublic = project.idPublic
+  
+  // If no valid connections, force private
+  if (validConnections === 0) {
+    isPublic = false
+    idPublic = null
+  } else if (makePublic) {
+    // Generate new 12-character ID
+    idPublic = nanoid(12)
+  } else {
+    idPublic = null
+  }
+  
+  // Update project
+  const updated = await prisma.project.update({
+    where: { id: projectId },
+    data: { isPublic, idPublic },
+  })
+  
+  return NextResponse.json(updated)
+}
+```
+
+### Why nanoid?
+
+- **Unguessable**: 12 characters = ~2.2 trillion possible combinations
+- **URL-safe**: Uses alphanumeric characters (A-Za-z0-9)
+- **Collision-resistant**: Extremely low probability of duplicates
+- **Fast**: High-performance ID generation
+
+<Warning>
+  Public links provide **security through obscurity**. Do not share public links for dashboards containing sensitive data unless you trust all potential viewers.
+</Warning>
+
+## Regenerating Public Links
+
+If you need to revoke access to a public link, you can regenerate it.
+
+<Steps>
+  <Step title="Open Share Dialog">
+    Click the "Share" button on your project dashboard.
+  </Step>
+  
+  <Step title="Click Regenerate Link">
+    In the share dialog, click the "Regenerate Link" button.
+  </Step>
+  
+  <Step title="Confirm Regeneration">
+    A new 12-character ID is generated, replacing the old one.
+    
+    The old link (`/public/old-id`) **immediately stops working**.
+  </Step>
+  
+  <Step title="Share New Link">
+    Copy and share the new public URL with your audience.
+  </Step>
+</Steps>
+
+### Regeneration Code
+
+From `src/components/projects/dialogs/shareProjectDialog.tsx:73-93`:
+
+```typescript
+const handleRegenerate = async () => {
+  try {
+    const res = await fetch(`/api/projects/${project.id}/public`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ public: true }),
+    })
+    
+    const data = await res.json()
+    
+    // Update UI with new idPublic
+    updateProject(project.id, {
+      isPublic: data.isPublic,
+      idPublic: data.idPublic,
+    })
+  } catch {
+    toast.error("Failed to regenerate public link")
+  }
+}
+```
+
+<Note>
+  Each regeneration creates a **completely new** ID. There's no way to recover the old link after regeneration.
+</Note>
+
+## Making a Project Private
+
+You can revoke all public access by making the project private again.
+
+<Steps>
+  <Step title="Open Share Dialog">
+    Navigate to your project and open the share settings.
+  </Step>
+  
+  <Step title="Disable Public Access">
+    Toggle the "Public Dashboard" switch to **OFF**.
+  </Step>
+  
+  <Step title="Confirm Changes">
+    The project is updated:
+    - `isPublic: false`
+    - `idPublic: null`
+    
+    The public link immediately stops working and returns a 404 error.
+  </Step>
+</Steps>
+
+## Viewing Public Dashboards
+
+Anyone with a public link can view the dashboard without logging in.
+
+### Public URL Format
+
+```
+https://yourapp.com/public/{idPublic}
+```
+
+Example:
+```
+https://vizboard.com/public/a8f3j2k9x7q1
+```
+
+### Public Dashboard Features
+
+<CardGroup cols={2}>
+  <Card title="Read-Only Access" icon="eye">
+    Viewers can see all widgets but cannot edit, delete, or create new ones
+  </Card>
+  
+  <Card title="Live Data" icon="bolt">
+    Data refreshes automatically to show current information from the database
+  </Card>
+  
+  <Card title="No Authentication" icon="unlock">
+    No login required - anyone with the link can access
+  </Card>
+  
+  <Card title="Responsive Design" icon="mobile">
+    Dashboards work on desktop, tablet, and mobile devices
+  </Card>
+</CardGroup>
+
+### What Viewers Cannot Do
+
+- Edit widget configurations
+- Delete widgets
+- Create new widgets
+- Change project settings
+- View or edit database connections
+- Access other projects by the same user
+
+## Valid Connection Requirement
+
+Projects must have at least one valid database connection to be made public.
+
+### Validation Logic
+
+From `src/app/api/projects/[projectId]/public/route.ts:29-39`:
+
+```typescript
+const validConnections = project.dbconnections.filter(
+  (conn) => conn.isValid === true
+).length
+
+if (validConnections === 0) {
+  isPublic = false
+  idPublic = null
+}
+```
+
+### What Happens if Connections Become Invalid
+
+If all connections in a public project become invalid:
+
+1. The project is automatically made private
+2. `isPublic` is set to `false`
+3. `idPublic` is set to `null`
+4. The public link stops working
+5. Users see a "Project not found" message
+
+<Warning>
+  **Important**: Fix invalid connections before sharing. Projects with no valid connections cannot be made public.
+</Warning>
+
+## Database Schema
+
+Project sharing data is stored in the Project model:
+
+```prisma
+model Project {
+  id                  String         @id @default(uuid())
+  userId              String
+  title               String
+  description         String?
+  isPublic            Boolean        @default(false)
+  idPublic            String?        @unique
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  lastIntrospectionAt DateTime?
+  dbconnections       DbConnection[]
+  user                User           @relation(...)
+  widgets             Widget[]
+  orderedWidgetIds    String[]
+}
+```
+
+### Key Fields
+
+<ParamField path="isPublic" type="boolean" default="false">
+  Whether the project is accessible via public link
+</ParamField>
+
+<ParamField path="idPublic" type="string" default="null">
+  Unique 12-character identifier for the public URL. Must be unique across all projects.
+</ParamField>
+
+## Security Considerations
+
+<CardGroup cols={2}>
+  <Card title="No User Data Exposed" icon="shield">
+    Public dashboards do not reveal user information, email, or other projects
+  </Card>
+  
+  <Card title="No Connection Details" icon="lock">
+    Database credentials and connection details are never exposed to viewers
+  </Card>
+  
+  <Card title="Rate Limiting" icon="gauge">
+    Consider implementing rate limiting on public endpoints to prevent abuse
+  </Card>
+  
+  <Card title="Data Sensitivity" icon="exclamation-triangle">
+    Only share dashboards containing non-sensitive data, or ensure proper data masking
+  </Card>
+</CardGroup>
+
+### Recommended Security Practices
+
+1. **Review Data**: Before making a project public, review all widgets to ensure no sensitive data is displayed
+2. **Use Read-Only DB Users**: Connect with database users that only have SELECT permissions
+3. **Monitor Access**: Track public dashboard views if analytics are important
+4. **Regenerate Periodically**: Regenerate public links periodically to limit exposure
+5. **Revoke When Done**: Make projects private when public access is no longer needed
+
+## Use Cases
+
+<CardGroup cols={2}>
+  <Card title="Client Reporting" icon="chart-pie">
+    Share live dashboards with clients without giving them account access
+  </Card>
+  
+  <Card title="Team Dashboards" icon="users">
+    Display dashboards on office TVs or shared screens
+  </Card>
+  
+  <Card title="Public Metrics" icon="chart-line">
+    Share public-facing metrics like community stats or open data
+  </Card>
+  
+  <Card title="Embedded Dashboards" icon="code">
+    Embed public dashboards in external websites or applications
+  </Card>
+</CardGroup>
+
+## Embedding Public Dashboards
+
+Public dashboards can be embedded in iframes:
+
+```html
+<iframe
+  src="https://yourapp.com/public/a8f3j2k9x7q1"
+  width="100%"
+  height="600px"
+  frameborder="0"
+></iframe>
+```
+
+<Note>
+  Ensure your application allows iframe embedding by setting appropriate `Content-Security-Policy` headers.
+</Note>
+
+## Troubleshooting
+
+### "Cannot make project public" Error
+
+**Cause**: No valid database connections
+
+**Solution**:
+- Fix invalid connections in the project
+- Ensure at least one connection has `isValid: true`
+- Regenerate schemas if needed
+
+### Public Link Returns 404
+
+**Causes**:
+- Project was made private
+- Link was regenerated (old ID no longer valid)
+- Project was deleted
+- All database connections became invalid
+
+**Solution**:
+- Verify project is still public
+- Get the latest public link from the share dialog
+- Check connection status
+
+### Public Dashboard Shows No Data
+
+**Causes**:
+- Database connection issues
+- Tables are empty
+- Widget configuration errors
+
+**Solution**:
+- Verify connections are valid
+- Check that tables contain data
+- Review widget configurations
+
+### Public Link Doesn't Update After Changes
+
+**Cause**: Browser caching
+
+**Solution**:
+- Hard refresh the page (Ctrl+Shift+R or Cmd+Shift+R)
+- Clear browser cache
+- Try in incognito/private mode
+
+## API Reference
+
+### Toggle Project Visibility
+
+```typescript
+POST /api/projects/{projectId}/public
+
+Body:
+{
+  "public": true | false
+}
+
+Response:
+{
+  "isPublic": boolean,
+  "idPublic": string | null
+}
+```
+
+### Update Project
+
+```typescript
+import { updateProject } from "@/app/actions/project/crud"
+
+const result = await updateProject({
+  id: projectId,
+  isPublic: true,
+})
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Descriptive Project Names" icon="tag">
+    Use clear project titles so viewers understand what they're seeing
+  </Card>
+  
+  <Card title="Add Context with Text Widgets" icon="text">
+    Include text widgets to explain dashboard purpose and metrics
+  </Card>
+  
+  <Card title="Test Before Sharing" icon="vial">
+    View your public dashboard in incognito mode before sharing
+  </Card>
+  
+  <Card title="Keep Dashboards Simple" icon="minimize">
+    Limit widgets to the most important metrics for public viewers
+  </Card>
+  
+  <Card title="Monitor Performance" icon="tachometer-alt">
+    Ensure database queries are optimized for public access
+  </Card>
+  
+  <Card title="Regular Reviews" icon="calendar-check">
+    Periodically review public projects and revoke access as needed
+  </Card>
+</CardGroup>

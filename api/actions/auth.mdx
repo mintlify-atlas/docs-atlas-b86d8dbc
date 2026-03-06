@@ -1,0 +1,456 @@
+---
+title: 'Authentication Actions'
+description: 'Server actions for user authentication and session management'
+icon: 'lock'
+---
+
+## Overview
+
+Authentication server actions handle user registration, session management, and profile updates in VizBoard.
+
+---
+
+## SignUp
+
+Creates a new user account with email and password authentication.
+
+```typescript
+export async function SignUp(data: signup): Promise<SignUpResponse>
+```
+
+### Parameters
+
+<ParamField path="data" type="signup" required>
+  User registration data
+  
+  <ParamField path="data.email" type="string" required>
+    User's email address (will be converted to lowercase)
+  </ParamField>
+  
+  <ParamField path="data.password" type="string" required>
+    User's password (will be hashed with bcrypt)
+  </ParamField>
+  
+  <ParamField path="data.firstName" type="string" required>
+    User's first name
+  </ParamField>
+  
+  <ParamField path="data.lastName" type="string" required>
+    User's last name
+  </ParamField>
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  Indicates if the registration was successful
+</ResponseField>
+
+<ResponseField name="message" type="string" required>
+  Success or error message
+  
+  Possible messages:
+  - `"User registered successfully"` - Registration succeeded
+  - `"This email is already registered."` - Email already exists
+  - `"This email is already registered with Google or GitHub..."` - OAuth conflict
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+```typescript Usage
+import { SignUp } from '@/app/actions/auth/signUp'
+
+const result = await SignUp({
+  email: 'user@example.com',
+  password: 'securePassword123',
+  firstName: 'John',
+  lastName: 'Doe'
+})
+
+if (result.success) {
+  console.log('User registered successfully')
+} else {
+  console.error(result.message)
+}
+```
+
+```json Response (Success)
+{
+  "success": true,
+  "message": "User registered successfully"
+}
+```
+
+```json Response (Error)
+{
+  "success": false,
+  "message": "This email is already registered."
+}
+```
+</CodeGroup>
+
+---
+
+## getUserByEmail
+
+Retrieves a user by their email address.
+
+```typescript
+export async function getUserByEmail(email: string): Promise<User | null>
+```
+
+### Parameters
+
+<ParamField path="email" type="string" required>
+  The email address to search for
+</ParamField>
+
+### Response
+
+Returns a `User` object if found, or `null` if no user exists with that email.
+
+<ResponseField name="id" type="string">
+  Unique user identifier
+</ResponseField>
+
+<ResponseField name="email" type="string">
+  User's email address
+</ResponseField>
+
+<ResponseField name="firstName" type="string">
+  User's first name
+</ResponseField>
+
+<ResponseField name="lastName" type="string">
+  User's last name
+</ResponseField>
+
+<ResponseField name="password" type="string | null">
+  Hashed password (null for OAuth users)
+</ResponseField>
+
+### Example
+
+```typescript
+import { getUserByEmail } from '@/app/actions/user/user'
+
+const user = await getUserByEmail('user@example.com')
+
+if (user) {
+  console.log(`Found user: ${user.firstName} ${user.lastName}`)
+}
+```
+
+---
+
+## getUserBySession
+
+Retrieves the currently authenticated user from the session.
+
+```typescript
+export async function getUserBySession(): Promise<UserSessionResponse>
+```
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  Indicates if the user was retrieved successfully
+</ResponseField>
+
+<ResponseField name="user" type="User" required>
+  The authenticated user object (only present when `success` is true)
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Error message (only present when `success` is false)
+  
+  Possible values:
+  - `"Not authenticated"` - No active session
+  - `"Error fetching user"` - Database error
+</ResponseField>
+
+### Example
+
+<CodeGroup>
+```typescript Usage
+import { getUserBySession } from '@/app/actions/user/user'
+
+const result = await getUserBySession()
+
+if (result.success && result.user) {
+  console.log(`Current user: ${result.user.name}`)
+} else {
+  console.error(result.message)
+}
+```
+
+```json Response (Success)
+{
+  "success": true,
+  "user": {
+    "id": "clx1234567",
+    "email": "user@example.com",
+    "firstName": "John",
+    "lastName": "Doe",
+    "name": "John Doe"
+  }
+}
+```
+
+```json Response (Error)
+{
+  "success": false,
+  "message": "Not authenticated"
+}
+```
+</CodeGroup>
+
+---
+
+## updateUserName
+
+Updates the user's first and last name.
+
+```typescript
+export async function updateUserName(
+  userId: string,
+  data: { firstName: string; lastName: string }
+): Promise<UpdateResponse>
+```
+
+### Parameters
+
+<ParamField path="userId" type="string" required>
+  The ID of the user to update
+</ParamField>
+
+<ParamField path="data" type="object" required>
+  <ParamField path="data.firstName" type="string" required>
+    New first name
+  </ParamField>
+  
+  <ParamField path="data.lastName" type="string" required>
+    New last name
+  </ParamField>
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  Indicates if the update was successful
+</ResponseField>
+
+<ResponseField name="message" type="string" required>
+  Success or error message
+</ResponseField>
+
+### Example
+
+```typescript
+import { updateUserName } from '@/app/actions/user/user'
+
+const result = await updateUserName('clx1234567', {
+  firstName: 'Jane',
+  lastName: 'Smith'
+})
+
+if (result.success) {
+  console.log('Name updated successfully')
+}
+```
+
+<Info>This action automatically revalidates the `/settings` path.</Info>
+
+---
+
+## updateUserEmail
+
+Updates the user's email address.
+
+```typescript
+export async function updateUserEmail(
+  userId: string,
+  data: { email: string }
+): Promise<UpdateResponse>
+```
+
+### Parameters
+
+<ParamField path="userId" type="string" required>
+  The ID of the user to update
+</ParamField>
+
+<ParamField path="data" type="object" required>
+  <ParamField path="data.email" type="string" required>
+    New email address (will be converted to lowercase)
+  </ParamField>
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  Indicates if the update was successful
+</ResponseField>
+
+<ResponseField name="message" type="string" required>
+  Success or error message
+</ResponseField>
+
+### Example
+
+```typescript
+import { updateUserEmail } from '@/app/actions/user/user'
+
+const result = await updateUserEmail('clx1234567', {
+  email: 'newemail@example.com'
+})
+```
+
+---
+
+## updateUserPassword
+
+Updates the user's password after verifying the current password.
+
+```typescript
+export async function updateUserPassword(
+  userId: string,
+  userPassword: string | null,
+  data: { currentPassword: string; newPassword: string }
+): Promise<UpdateResponse>
+```
+
+### Parameters
+
+<ParamField path="userId" type="string" required>
+  The ID of the user to update
+</ParamField>
+
+<ParamField path="userPassword" type="string | null" required>
+  The user's current hashed password (null for OAuth users)
+</ParamField>
+
+<ParamField path="data" type="object" required>
+  <ParamField path="data.currentPassword" type="string" required>
+    User's current password (plaintext)
+  </ParamField>
+  
+  <ParamField path="data.newPassword" type="string" required>
+    New password (plaintext, will be hashed)
+  </ParamField>
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  Indicates if the update was successful
+</ResponseField>
+
+<ResponseField name="message" type="string" required>
+  Success or error message
+  
+  Possible messages:
+  - `"Password updated successfully"`
+  - `"You are connected with a social account"`
+  - `"Current password is not correct"`
+  - `"New password must be different from current password"`
+</ResponseField>
+
+### Example
+
+```typescript
+import { updateUserPassword } from '@/app/actions/user/user'
+
+const result = await updateUserPassword(
+  'clx1234567',
+  user.password, // current hashed password from DB
+  {
+    currentPassword: 'oldPassword123',
+    newPassword: 'newSecurePassword456'
+  }
+)
+
+if (result.success) {
+  console.log('Password updated')
+} else {
+  console.error(result.message)
+}
+```
+
+---
+
+## deleteUserAccount
+
+Permanently deletes a user account and clears their session.
+
+```typescript
+export async function deleteUserAccount(userId: string): Promise<DeleteResponse>
+```
+
+### Parameters
+
+<ParamField path="userId" type="string" required>
+  The ID of the user to delete
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  Indicates if the deletion was successful
+</ResponseField>
+
+<ResponseField name="message" type="string" required>
+  Success or error message
+</ResponseField>
+
+### Example
+
+```typescript
+import { deleteUserAccount } from '@/app/actions/user/user'
+
+const result = await deleteUserAccount('clx1234567')
+
+if (result.success) {
+  // Redirect to landing page
+  redirect('/')
+}
+```
+
+<Warning>
+  This action is irreversible and will delete all user data, including projects, connections, and widgets.
+</Warning>
+
+---
+
+## Type Definitions
+
+```typescript
+interface signup {
+  firstName: string
+  lastName: string
+  email: string
+  password: string
+}
+
+interface SignUpResponse {
+  success: boolean
+  message: string
+}
+
+interface UserSessionResponse {
+  success: boolean
+  user?: User
+  message?: string
+}
+
+interface UpdateResponse {
+  success: boolean
+  message: string
+}
+
+interface DeleteResponse {
+  success: boolean
+  message: string
+}
+```

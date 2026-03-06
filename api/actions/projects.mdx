@@ -1,0 +1,766 @@
+---
+title: 'Project Actions'
+description: 'Server actions for managing projects and their configurations'
+icon: 'folder'
+---
+
+## Overview
+
+Project server actions handle CRUD operations for VizBoard projects, including creation with database connections, updates, deletion, and schema management.
+
+---
+
+## createProjectWithConnections
+
+Creates a new project with optional database connections. Supports both full project creation and draft mode.
+
+```typescript
+export async function createProjectWithConnections(
+  input: (ProjectCreateData | ProjectCreateDraftData) & { userId: string }
+): Promise<CreateProjectResponse>
+```
+
+### Parameters
+
+<ParamField path="input" type="object" required>
+  <ParamField path="input.title" type="string" required>
+    Project title (1-100 characters, alphanumeric with spaces, dots, underscores, hyphens)
+  </ParamField>
+  
+  <ParamField path="input.description" type="string">
+    Project description (max 500 characters)
+  </ParamField>
+  
+  <ParamField path="input.isPublic" type="boolean" default={false}>
+    Whether the project is publicly accessible
+  </ParamField>
+  
+  <ParamField path="input.userId" type="string" required>
+    ID of the user creating the project
+  </ParamField>
+  
+  <ParamField path="input.connections" type="DatabaseConnection[]">
+    Array of database connections. At least one required for non-draft projects.
+    
+    <ParamField path="connections[].title" type="string" required>
+      Connection name (1-50 characters)
+    </ParamField>
+    
+    <ParamField path="connections[].host" type="string" required>
+      Database host (IP, localhost, or hostname)
+    </ParamField>
+    
+    <ParamField path="connections[].port" type="number" required>
+      Database port (1-65535)
+    </ParamField>
+    
+    <ParamField path="connections[].database" type="string" required>
+      Database name (1-60 characters, alphanumeric with hyphens/underscores)
+    </ParamField>
+    
+    <ParamField path="connections[].user" type="string" required>
+      Database username (1-50 characters)
+    </ParamField>
+    
+    <ParamField path="connections[].password" type="string" required>
+      Database password (min 1 character)
+    </ParamField>
+  </ParamField>
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  Indicates if the project was created successfully
+</ResponseField>
+
+<ResponseField name="projectId" type="string">
+  ID of the created project (only when success is true)
+</ResponseField>
+
+<ResponseField name="validationResult" type="ValidationResult | null">
+  Connection validation results after creation
+  
+  <ResponseField name="validationResult.success" type="boolean">
+    Whether validation succeeded
+  </ResponseField>
+  
+  <ResponseField name="validationResult.connectionStatuses" type="ConnectionStatus[]">
+    Status of each connection
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Error message (only when success is false)
+</ResponseField>
+
+### Behavior
+
+- **Auto-validation**: Connections are automatically validated after creation
+- **Auto-introspection**: Valid connections are automatically introspected to extract schema
+- **Draft mode**: Projects can be created without connections (draft mode)
+- **Encryption**: Connection credentials are encrypted before storage
+- **Revalidation**: Automatically revalidates the `/projects` path
+
+### Example
+
+<CodeGroup>
+```typescript Full Project
+import { createProjectWithConnections } from '@/app/actions/project/crud'
+
+const result = await createProjectWithConnections({
+  title: 'Analytics Dashboard',
+  description: 'Customer analytics and reporting',
+  isPublic: false,
+  userId: 'clx1234567',
+  connections: [
+    {
+      title: 'Production DB',
+      host: 'db.example.com',
+      port: 5432,
+      database: 'analytics',
+      user: 'readonly_user',
+      password: 'secure_password'
+    }
+  ]
+})
+
+if (result.success) {
+  console.log('Project created:', result.projectId)
+  console.log('Valid connections:', result.validationResult?.connectionStatuses)
+}
+```
+
+```typescript Draft Project
+// Create a project without connections (draft mode)
+const draft = await createProjectWithConnections({
+  title: 'New Project',
+  description: 'Work in progress',
+  isPublic: false,
+  userId: 'clx1234567',
+  connections: [] // Empty array creates a draft
+})
+```
+
+```json Response (Success)
+{
+  "success": true,
+  "projectId": "clx7890abc",
+  "validationResult": {
+    "success": true,
+    "connectionStatuses": [
+      {
+        "id": "conn_123",
+        "isValid": true,
+        "error": null
+      }
+    ]
+  }
+}
+```
+</CodeGroup>
+
+---
+
+## updateProject
+
+Updates an existing project and its connections.
+
+```typescript
+export async function updateProject(data: UpdateProjectData): Promise<UpdateProjectResponse>
+```
+
+### Parameters
+
+<ParamField path="data" type="UpdateProjectData" required>
+  <ParamField path="data.id" type="string" required>
+    Project ID to update
+  </ParamField>
+  
+  <ParamField path="data.title" type="string">
+    New project title
+  </ParamField>
+  
+  <ParamField path="data.description" type="string">
+    New project description
+  </ParamField>
+  
+  <ParamField path="data.isPublic" type="boolean">
+    New public visibility setting
+  </ParamField>
+  
+  <ParamField path="data.connections" type="ConnectionUpdateData[]">
+    Updated connections array
+    
+    <ParamField path="connections[].id" type="string">
+      Connection ID (for existing connections)
+    </ParamField>
+    
+    <ParamField path="connections[].title" type="string" required>
+      Connection name
+    </ParamField>
+    
+    <ParamField path="connections[].host" type="string" required>
+      Database host
+    </ParamField>
+    
+    <ParamField path="connections[].port" type="number" required>
+      Database port
+    </ParamField>
+    
+    <ParamField path="connections[].database" type="string" required>
+      Database name
+    </ParamField>
+    
+    <ParamField path="connections[].user" type="string" required>
+      Database username
+    </ParamField>
+    
+    <ParamField path="connections[].password" type="string" required>
+      Database password or `"KEEP_CURRENT_PASSWORD"` to preserve existing password
+    </ParamField>
+    
+    <ParamField path="connections[].isExisting" type="boolean">
+      Whether this is an existing connection (internal use)
+    </ParamField>
+  </ParamField>
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  Indicates if the update was successful
+</ResponseField>
+
+<ResponseField name="validationResult" type="ValidationResult | null">
+  Connection validation results after update
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Error message (only when success is false)
+</ResponseField>
+
+### Behavior
+
+- **Ownership verification**: Only the project owner can update
+- **Connection management**: Connections not in the update array are deleted
+- **Password handling**: Use `"KEEP_CURRENT_PASSWORD"` to preserve existing passwords
+- **Auto-validation**: Connections are validated after update
+- **Auto-introspection**: Valid connections are re-introspected
+- **Public constraint**: Projects without valid connections are automatically set to private
+- **Revalidation**: Revalidates `/projects` and `/projects/:id` paths
+
+### Example
+
+<CodeGroup>
+```typescript Update Project
+import { updateProject } from '@/app/actions/project/crud'
+
+const result = await updateProject({
+  id: 'clx7890abc',
+  title: 'Updated Analytics Dashboard',
+  description: 'New description',
+  connections: [
+    {
+      id: 'conn_123', // Existing connection
+      title: 'Production DB',
+      host: 'db.example.com',
+      port: 5432,
+      database: 'analytics',
+      user: 'readonly_user',
+      password: 'KEEP_CURRENT_PASSWORD' // Keep existing password
+    },
+    {
+      // New connection (no id)
+      title: 'Staging DB',
+      host: 'staging.example.com',
+      port: 5432,
+      database: 'analytics_staging',
+      user: 'staging_user',
+      password: 'new_password'
+    }
+  ]
+})
+```
+
+```json Response
+{
+  "success": true,
+  "validationResult": {
+    "success": true,
+    "validConnections": 2,
+    "totalConnections": 2
+  }
+}
+```
+</CodeGroup>
+
+<Info>
+  Use `"KEEP_CURRENT_PASSWORD"` to avoid requiring users to re-enter passwords when editing connections.
+</Info>
+
+---
+
+## deleteProject
+
+Permanently deletes a project and all associated connections and widgets.
+
+```typescript
+export async function deleteProject(
+  projectId: string,
+  userId: string
+): Promise<DeleteProjectResponse>
+```
+
+### Parameters
+
+<ParamField path="projectId" type="string" required>
+  ID of the project to delete
+</ParamField>
+
+<ParamField path="userId" type="string" required>
+  ID of the user requesting deletion (must be owner)
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  Indicates if deletion was successful
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Success message with project title
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Error message (only when success is false)
+  
+  Possible errors:
+  - `"Invalid project ID"`
+  - `"Project not found"`
+  - `"Unauthorized: You can only delete your own projects"`
+</ResponseField>
+
+### Behavior
+
+- **Cascade deletion**: Deletes all widgets, connections, and the project
+- **Ownership verification**: Only the project owner can delete
+- **Transaction**: All deletions occur in a database transaction
+- **Revalidation**: Revalidates the `/projects` path
+
+### Example
+
+```typescript
+import { deleteProject } from '@/app/actions/project/crud'
+
+const result = await deleteProject('clx7890abc', 'clx1234567')
+
+if (result.success) {
+  console.log(result.message) // "Project 'Analytics Dashboard' deleted successfully"
+} else {
+  console.error(result.error)
+}
+```
+
+<Warning>
+  This action is irreversible and will delete all associated data including widgets and database connections.
+</Warning>
+
+---
+
+## getProjectWithConnections
+
+Retrieves a project with decrypted connection details.
+
+```typescript
+export async function getProjectWithConnections(
+  projectId: string,
+  userId: string
+): Promise<GetProjectResponse>
+```
+
+### Parameters
+
+<ParamField path="projectId" type="string" required>
+  ID of the project to retrieve
+</ParamField>
+
+<ParamField path="userId" type="string" required>
+  ID of the user requesting the project (must be owner)
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  Indicates if retrieval was successful
+</ResponseField>
+
+<ResponseField name="data" type="ProjectWithConnections">
+  Project data with decrypted connections
+  
+  <ResponseField name="data.id" type="string">
+    Project ID
+  </ResponseField>
+  
+  <ResponseField name="data.title" type="string">
+    Project title
+  </ResponseField>
+  
+  <ResponseField name="data.description" type="string">
+    Project description
+  </ResponseField>
+  
+  <ResponseField name="data.isPublic" type="boolean">
+    Public visibility status
+  </ResponseField>
+  
+  <ResponseField name="data.idPublic" type="string | null">
+    Public ID for sharing
+  </ResponseField>
+  
+  <ResponseField name="data.orderedWidgetIds" type="string[]">
+    Ordered array of widget IDs
+  </ResponseField>
+  
+  <ResponseField name="data.databases" type="DatabaseConnection[]">
+    Array of database connections
+    
+    <ResponseField name="databases[].id" type="string">
+      Connection ID
+    </ResponseField>
+    
+    <ResponseField name="databases[].title" type="string">
+      Connection name
+    </ResponseField>
+    
+    <ResponseField name="databases[].host" type="string">
+      Database host
+    </ResponseField>
+    
+    <ResponseField name="databases[].port" type="number">
+      Database port
+    </ResponseField>
+    
+    <ResponseField name="databases[].database" type="string">
+      Database name
+    </ResponseField>
+    
+    <ResponseField name="databases[].user" type="string">
+      Database username
+    </ResponseField>
+    
+    <ResponseField name="databases[].password" type="string">
+      Always empty string for security
+    </ResponseField>
+    
+    <ResponseField name="databases[].status" type="'valid' | 'invalid' | 'pending'">
+      Connection validation status
+    </ResponseField>
+    
+    <ResponseField name="databases[].isExisting" type="boolean">
+      Always true for retrieved connections
+    </ResponseField>
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Error message (only when success is false)
+</ResponseField>
+
+### Example
+
+```typescript
+import { getProjectWithConnections } from '@/app/actions/project/crud'
+
+const result = await getProjectWithConnections('clx7890abc', 'clx1234567')
+
+if (result.success && result.data) {
+  console.log('Project:', result.data.title)
+  console.log('Connections:', result.data.databases.length)
+  
+  result.data.databases.forEach(db => {
+    console.log(`${db.title}: ${db.status}`)
+  })
+}
+```
+
+<Note>
+  Passwords are always returned as empty strings for security. Use `"KEEP_CURRENT_PASSWORD"` when updating.
+</Note>
+
+---
+
+## getUserProjects
+
+Retrieves all projects for a user with connection and widget statistics.
+
+```typescript
+export async function getUserProjects(userId: string): Promise<GetUserProjectsResponse>
+```
+
+### Parameters
+
+<ParamField path="userId" type="string" required>
+  ID of the user whose projects to retrieve
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  Indicates if retrieval was successful
+</ResponseField>
+
+<ResponseField name="data" type="ProjectWithStats[]">
+  Array of projects with statistics
+  
+  <ResponseField name="data[].id" type="string">
+    Project ID
+  </ResponseField>
+  
+  <ResponseField name="data[].title" type="string">
+    Project title
+  </ResponseField>
+  
+  <ResponseField name="data[].description" type="string">
+    Project description
+  </ResponseField>
+  
+  <ResponseField name="data[].isPublic" type="boolean">
+    Public visibility status
+  </ResponseField>
+  
+  <ResponseField name="data[].totalConnections" type="number">
+    Total number of connections
+  </ResponseField>
+  
+  <ResponseField name="data[].validConnections" type="number">
+    Number of valid connections
+  </ResponseField>
+  
+  <ResponseField name="data[].hasValidatedConnections" type="boolean">
+    Whether any connections have been validated
+  </ResponseField>
+  
+  <ResponseField name="data[].totalSchemas" type="number">
+    Number of valid connections (same as validConnections)
+  </ResponseField>
+  
+  <ResponseField name="data[].validSchemas" type="number">
+    Number of connections with introspected schemas
+  </ResponseField>
+  
+  <ResponseField name="data[].hasIntrospectedSchemas" type="boolean">
+    Whether any schemas have been introspected
+  </ResponseField>
+  
+  <ResponseField name="data[].widgetCount" type="number">
+    Number of widgets in the project
+  </ResponseField>
+  
+  <ResponseField name="data[].createdAt" type="Date">
+    Project creation timestamp
+  </ResponseField>
+  
+  <ResponseField name="data[].updatedAt" type="Date">
+    Last update timestamp
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Error message (only when success is false)
+</ResponseField>
+
+### Example
+
+```typescript
+import { getUserProjects } from '@/app/actions/project/crud'
+
+const result = await getUserProjects('clx1234567')
+
+if (result.success && result.data) {
+  result.data.forEach(project => {
+    console.log(`${project.title}: ${project.validConnections}/${project.totalConnections} valid connections`)
+    console.log(`  Widgets: ${project.widgetCount}`)
+    console.log(`  Schemas: ${project.validSchemas}/${project.totalSchemas}`)
+  })
+}
+```
+
+---
+
+## regenerateProjectSchemas
+
+Re-introspects all valid database connections in a project to refresh schema data.
+
+```typescript
+export async function regenerateProjectSchemas(
+  projectId: string,
+  userId: string
+): Promise<RegenerateResponse>
+```
+
+### Parameters
+
+<ParamField path="projectId" type="string" required>
+  ID of the project to regenerate schemas for
+</ParamField>
+
+<ParamField path="userId" type="string" required>
+  ID of the user requesting regeneration (must be owner)
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  Indicates if regeneration was successful
+</ResponseField>
+
+<ResponseField name="data" type="RegenerateData">
+  Regeneration results
+  
+  <ResponseField name="data.totalConnections" type="number">
+    Total connections processed
+  </ResponseField>
+  
+  <ResponseField name="data.successfulRegeneration" type="number">
+    Number of successful regenerations
+  </ResponseField>
+  
+  <ResponseField name="data.failedRegeneration" type="number">
+    Number of failed regenerations
+  </ResponseField>
+  
+  <ResponseField name="data.details" type="ConnectionResult[]">
+    Detailed results per connection
+    
+    <ResponseField name="details[].connectionId" type="string">
+      Connection ID
+    </ResponseField>
+    
+    <ResponseField name="details[].connectionTitle" type="string">
+      Connection name
+    </ResponseField>
+    
+    <ResponseField name="details[].success" type="boolean">
+      Whether regeneration succeeded
+    </ResponseField>
+    
+    <ResponseField name="details[].error" type="string">
+      Error message (if failed)
+    </ResponseField>
+  </ResponseField>
+</ResponseField>
+
+<ResponseField name="error" type="string">
+  Error message (only when success is false)
+</ResponseField>
+
+### Example
+
+```typescript
+import { regenerateProjectSchemas } from '@/app/actions/project/crud'
+
+const result = await regenerateProjectSchemas('clx7890abc', 'clx1234567')
+
+if (result.success && result.data) {
+  console.log(`Regenerated ${result.data.successfulRegeneration}/${result.data.totalConnections} schemas`)
+  
+  result.data.details.forEach(detail => {
+    if (!detail.success) {
+      console.error(`Failed: ${detail.connectionTitle} - ${detail.error}`)
+    }
+  })
+}
+```
+
+---
+
+## isProjectOwner
+
+Checks if a user owns a specific project.
+
+```typescript
+export async function isProjectOwner(
+  userId: string,
+  projectId: string
+): Promise<OwnershipResponse>
+```
+
+### Parameters
+
+<ParamField path="userId" type="string" required>
+  User ID to check
+</ParamField>
+
+<ParamField path="projectId" type="string" required>
+  Project ID to check
+</ParamField>
+
+### Response
+
+<ResponseField name="success" type="boolean" required>
+  Indicates if the check was successful
+</ResponseField>
+
+<ResponseField name="isOwner" type="boolean" required>
+  Whether the user owns the project
+</ResponseField>
+
+<ResponseField name="message" type="string">
+  Error message (only when success is false)
+</ResponseField>
+
+### Example
+
+```typescript
+import { isProjectOwner } from '@/app/actions/project/crud'
+
+const result = await isProjectOwner('clx1234567', 'clx7890abc')
+
+if (result.success && result.isOwner) {
+  console.log('User owns this project')
+}
+```
+
+---
+
+## Type Definitions
+
+```typescript
+// Input types (Zod schemas)
+interface ProjectCreateData {
+  title: string          // 1-100 chars, alphanumeric + spaces/dots/underscores/hyphens
+  description?: string   // Max 500 chars
+  isPublic?: boolean     // Default: false
+  connections: DatabaseConnection[] // Min 1 required
+}
+
+interface ProjectCreateDraftData {
+  title: string
+  description?: string
+  isPublic?: boolean
+  connections?: DatabaseConnection[] // Optional for drafts
+}
+
+interface DatabaseConnection {
+  title: string         // 1-50 chars
+  host: string          // IP, localhost, or hostname
+  port: number          // 1-65535
+  database: string      // 1-60 chars, alphanumeric + hyphens/underscores
+  user: string          // 1-50 chars
+  password: string      // Min 1 char
+}
+
+interface UpdateProjectData {
+  id: string
+  title?: string
+  description?: string
+  isPublic?: boolean
+  connections?: ConnectionUpdateData[]
+}
+
+interface ConnectionUpdateData extends DatabaseConnection {
+  id?: string           // Present for existing connections
+  isExisting?: boolean  // Internal flag
+}
+```

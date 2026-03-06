@@ -1,0 +1,372 @@
+---
+title: Integrated Datatables
+description: Compare and analyze data from multiple database connections side by side
+icon: link
+---
+
+Integrated Datatables allow you to combine and compare data from multiple database connections in a single unified view. This powerful widget automatically identifies compatible tables across connections and merges their data.
+
+## Widget Type
+
+**Type:** `datatables`  
+**Subtype:** `integrated_dataTable`
+
+## Key Concepts
+
+<Note>
+Integrated datatables work by finding tables with **identical column names and types** across multiple database connections, then combining their data into a single view with a source indicator.
+</Note>
+
+### Use Cases
+
+- Compare production vs staging databases
+- Merge data from regional databases
+- Analyze data across customer-specific instances
+- Consolidate multi-tenant data for reporting
+- Compare historical backups with current data
+
+## Configuration
+
+### Requirements
+
+1. **Multiple Connections** - At least 2 database connections (required)
+2. **Compatible Tables** - Tables with matching column names and data types
+3. **Title** - Descriptive widget name (required)
+4. **Description** - Optional description
+
+### Configuration Object
+
+```typescript
+{
+  connectionIds: string[],  // Array of 2+ connection IDs
+  tables: string[]          // Array of compatible table names
+}
+```
+
+<Warning>
+You must select at least **2 connections** to create an integrated datatable. The widget will only show tables that exist with compatible schemas across all selected connections.
+</Warning>
+
+## How It Works
+
+<Steps>
+  <Step title="Select Connections">
+    Choose 2 or more database connections from your project. All selected connections must have schema information available.
+  </Step>
+  
+  <Step title="Find Compatible Tables">
+    VizBoard automatically analyzes the schemas and identifies tables that exist in all selected connections with matching column structures.
+    
+    The `/api/compatible-tables` endpoint compares:
+    - Table names (case-sensitive)
+    - Column names
+    - Column data types
+  </Step>
+  
+  <Step title="Select Tables">
+    Choose one or more compatible tables to display in the widget. Each table will be available via a dropdown selector.
+  </Step>
+  
+  <Step title="View Merged Data">
+    The widget fetches data from all selected connections and combines them, adding a special **SOURCE** column to identify which connection each row came from.
+  </Step>
+</Steps>
+
+## Examples
+
+### Production vs Staging Comparison
+
+```json
+{
+  "type": "datatables",
+  "subtype": "integrated_dataTable",
+  "title": "User Comparison: Prod vs Stage",
+  "description": "Compare user records across environments",
+  "configs": {
+    "connectionIds": [
+      "conn_production_abc123",
+      "conn_staging_def456"
+    ],
+    "tables": ["users", "sessions"]
+  }
+}
+```
+
+### Multi-Region Data Consolidation
+
+```json
+{
+  "type": "datatables",
+  "subtype": "integrated_dataTable",
+  "title": "Global Sales Data",
+  "description": "Combined sales from US, EU, and APAC databases",
+  "configs": {
+    "connectionIds": [
+      "conn_us_sales",
+      "conn_eu_sales",
+      "conn_apac_sales"
+    ],
+    "tables": ["orders", "customers", "products"]
+  }
+}
+```
+
+### Customer Instance Comparison
+
+```json
+{
+  "type": "datatables",
+  "subtype": "integrated_dataTable",
+  "title": "Multi-Tenant Analytics",
+  "configs": {
+    "connectionIds": [
+      "conn_tenant_acme",
+      "conn_tenant_globex",
+      "conn_tenant_initech"
+    ],
+    "tables": ["usage_metrics"]
+  }
+}
+```
+
+## The SOURCE Column
+
+<Tip>
+Integrated datatables automatically add a **SOURCE** column as the first column, showing which connection each row originated from.
+</Tip>
+
+The SOURCE column:
+- Appears as the leftmost column
+- Shows the connection name (not ID)
+- Is filterable and sortable
+- Uses a distinct visual style (badge format)
+- Helps identify data origin at a glance
+
+```typescript
+// Example merged data
+[
+  { "SOURCE": "Production DB", "id": 1, "name": "Alice" },
+  { "SOURCE": "Production DB", "id": 2, "name": "Bob" },
+  { "SOURCE": "Staging DB", "id": 1, "name": "Alice" },
+  { "SOURCE": "Staging DB", "id": 3, "name": "Carol" }
+]
+```
+
+## Compatible Table Detection
+
+Tables are considered compatible when they have:
+
+<Tabs>
+  <Tab title="Matching Schema">
+    **Required Matches:**
+    - Same table name (case-sensitive)
+    - Same column names
+    - Compatible data types
+    
+    **Example:**
+    ```sql
+    -- Connection 1: Production
+    CREATE TABLE users (
+      id INTEGER,
+      name VARCHAR(100),
+      email VARCHAR(255)
+    );
+    
+    -- Connection 2: Staging
+    CREATE TABLE users (
+      id INTEGER,
+      name VARCHAR(100),
+      email VARCHAR(255)
+    );
+    ```
+    ✅ These tables are compatible
+  </Tab>
+  
+  <Tab title="Incompatible Examples">
+    **Different Column Names:**
+    ```sql
+    -- Connection 1
+    CREATE TABLE users (id, name, email);
+    
+    -- Connection 2
+    CREATE TABLE users (user_id, full_name, email_address);
+    ```
+    ❌ Not compatible - column names don't match
+    
+    **Different Data Types:**
+    ```sql
+    -- Connection 1
+    CREATE TABLE orders (id INTEGER, amount DECIMAL);
+    
+    -- Connection 2
+    CREATE TABLE orders (id VARCHAR, amount TEXT);
+    ```
+    ❌ Not compatible - data types don't match
+    
+    **Missing Columns:**
+    ```sql
+    -- Connection 1
+    CREATE TABLE products (id, name, price);
+    
+    -- Connection 2
+    CREATE TABLE products (id, name);
+    ```
+    ❌ Not compatible - different column count
+  </Tab>
+</Tabs>
+
+## Features
+
+<CardGroup cols={2}>
+  <Card title="Source Identification" icon="tag">
+    Automatic SOURCE column shows data origin for each row
+  </Card>
+  <Card title="Unified Filtering" icon="filter">
+    Filter across all connections simultaneously
+  </Card>
+  <Card title="Smart Type Detection" icon="wand-magic-sparkles">
+    Automatic data type inference from actual values
+  </Card>
+  <Card title="Column Sorting" icon="arrow-down-a-z">
+    Sort by any column including SOURCE
+  </Card>
+  <Card title="Global Search" icon="magnifying-glass">
+    Search across all merged data
+  </Card>
+  <Card title="Table Switching" icon="arrows-rotate">
+    Dropdown selector for multiple compatible tables
+  </Card>
+</CardGroup>
+
+## Data Type Inference
+
+Since integrated datatables combine data from multiple sources, they use intelligent type inference:
+
+```typescript
+function inferColumnType(values: unknown[]): "number" | "boolean" | "date" | "array" | "string" {
+  // Analyzes first 100 values from merged data
+  // Returns the most appropriate type
+}
+```
+
+### Type Detection Rules
+
+1. **Number**: All values are numeric or numeric strings
+2. **Boolean**: All values are true/false variants
+3. **Array**: All values are arrays
+4. **Date**: Values match date patterns (ISO format, common formats)
+5. **String**: Default fallback for mixed or text data
+
+Source: `src/components/dashboard/widgets/integratedDatatable/integratedDatatableWidget.tsx:51-89`
+
+## Usage Tips
+
+<AccordionGroup>
+  <Accordion title="Ensuring table compatibility">
+    To maximize compatible tables:
+    - Use consistent naming conventions across databases
+    - Keep column names and types identical
+    - Use database migration tools to maintain schema consistency
+    - Document any schema differences between environments
+  </Accordion>
+  
+  <Accordion title="Performance considerations">
+    - Each connection is queried separately
+    - Data is merged on the client side
+    - More connections = longer load time
+    - Consider limiting to 3-5 connections for best performance
+    - Large tables may take longer to merge
+  </Accordion>
+  
+  <Accordion title="Understanding 'no compatible tables'">
+    If you see "No compatible tables found":
+    - Verify tables exist in ALL selected connections
+    - Check that column names match exactly (case-sensitive)
+    - Ensure column data types are compatible
+    - Confirm connections have schema information loaded
+  </Accordion>
+  
+  <Accordion title="When to use integrated vs simple datatables">
+    **Use Integrated Datatables when:**
+    - Comparing data across environments
+    - Consolidating multi-tenant data
+    - Analyzing regional databases
+    - Need to identify data source
+    
+    **Use Simple Datatables when:**
+    - Viewing data from a single connection
+    - No need to compare across databases
+    - Simpler use case with less overhead
+  </Accordion>
+</AccordionGroup>
+
+## Configuration Help
+
+The configuration dialog includes a helpful accordion with guidance:
+
+<Note>
+**What is an Integrated Datatable?**
+
+This widget type allows you to combine data from multiple database connections into a single table view. It's perfect for comparing data across environments (production vs staging) or consolidating data from multiple sources.
+
+**How it works:**
+
+Select 2 or more connections, and the system will find tables that exist in all selected connections with matching schemas. The data will be merged with a SOURCE column to identify which database each row came from.
+</Note>
+
+## Limitations
+
+<Warning>
+- Minimum 2 connections required
+- Tables must have identical schemas across all connections
+- Column names are case-sensitive
+- No support for joining different table structures
+- All connections must be active and accessible
+</Warning>
+
+## Source Code Reference
+
+Integrated datatable implementation:
+- Configuration: `src/components/dashboard/widgets/integratedDatatable/integratedDatatableConfigDialog.tsx:38-452`
+- Widget Rendering: `src/components/dashboard/widgets/integratedDatatable/integratedDatatableWidget.tsx:193-418`
+- Source Column Logic: `src/components/dashboard/widgets/integratedDatatable/integratedDatatableColumns.tsx`
+- Normalization: `src/components/dashboard/widgets/integratedDatatable/normalizeIntegratedConfig.ts`
+
+## API Endpoints
+
+### Compatible Tables Detection
+
+```http
+POST /api/compatible-tables
+Content-Type: application/json
+
+{
+  "connectionIds": ["conn_1", "conn_2", "conn_3"]
+}
+```
+
+**Response:**
+```json
+{
+  "compatibleTables": ["users", "orders", "products"],
+  "details": {
+    "users": {
+      "columns": [
+        { "name": "id", "type": "integer" },
+        { "name": "name", "type": "varchar" }
+      ]
+    }
+  }
+}
+```
+
+## Related Widgets
+
+<CardGroup cols={2}>
+  <Card title="Simple Datatables" icon="table" href="./datatables">
+    View data from a single database connection
+  </Card>
+  <Card title="Charts" icon="chart-line" href="./charts">
+    Visualize your integrated data with charts
+  </Card>
+</CardGroup>

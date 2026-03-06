@@ -1,0 +1,168 @@
+---
+title: Environment Setup
+description: Configure environment variables, security keys, and application settings for VizBoard development
+---
+
+This guide covers setting up your development environment for VizBoard, including all required environment variables and security key generation.
+
+## Environment Variables
+
+VizBoard requires several environment variables to run properly. Create a `.env` file in the project root with the following configuration:
+
+<CodeGroup>
+
+```bash .env
+# Main Database (PostgreSQL)
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/vizboard_main?schema=public"
+
+# NextAuth Configuration
+AUTH_SECRET="your-random-very-long-and-secure-secret-minimum-32-characters"
+NEXTAUTH_URL="http://localhost:3000"
+
+# Encryption Key for Database Credentials
+ENCRYPTION_KEY="your-32-byte-encryption-key-in-base64"
+
+# Optional: Development Settings
+NODE_ENV="development"
+```
+
+</CodeGroup>
+
+### Required Variables
+
+<Note>
+All variables listed below are **required** for the application to function correctly.
+</Note>
+
+| Variable | Description | Example |
+|----------|-------------|----------|
+| `DATABASE_URL` | PostgreSQL connection string for the main application database | `postgresql://postgres:postgres@localhost:5432/vizboard_main?schema=public` |
+| `AUTH_SECRET` | Secret key for NextAuth.js JWT token signing and encryption (minimum 32 characters) | Generated using `openssl rand -base64 32` |
+| `NEXTAUTH_URL` | Base URL of your application for authentication callbacks | `http://localhost:3000` (development) or your production URL |
+| `ENCRYPTION_KEY` | AES-256-GCM encryption key for securing external database credentials (must be 32 bytes in base64) | Generated using Node.js crypto module |
+
+### Optional Variables
+
+| Variable | Description | Default |
+|----------|-------------|----------|
+| `NODE_ENV` | Application environment mode | `development` |
+
+## Security Key Generation
+
+<Warning>
+**Never commit `.env` files to version control.** Always use strong, randomly generated keys in production environments.
+</Warning>
+
+VizBoard requires two cryptographically secure keys for authentication and encryption. Follow these steps to generate them:
+
+<Steps>
+
+<Step title="Generate AUTH_SECRET">
+
+The `AUTH_SECRET` is used by NextAuth.js to sign and encrypt JWT tokens. Generate a secure random string using OpenSSL:
+
+```bash
+openssl rand -base64 32
+```
+
+This will output a random base64-encoded string like:
+```
+HvZ8xQ3KjL9mN2pR5tY7wB0cD1fG4hJ6kM8nP9qS2uV5xA==
+```
+
+Copy this value to your `.env` file as `AUTH_SECRET`.
+
+</Step>
+
+<Step title="Generate ENCRYPTION_KEY">
+
+The `ENCRYPTION_KEY` is used to encrypt external database credentials before storing them in the database. It must be exactly 32 bytes encoded in base64.
+
+Generate it using Node.js:
+
+```bash
+node -e "console.log(require('crypto').randomBytes(32).toString('base64'))"
+```
+
+This will output a 32-byte base64-encoded string like:
+```
+8K9mN0pQ3rS5tU7vX9yA1bC3dE5fG7hI9jK1lM3nO5p==
+```
+
+Copy this value to your `.env` file as `ENCRYPTION_KEY`.
+
+</Step>
+
+<Step title="Verify Your Configuration">
+
+Your final `.env` file should look similar to this:
+
+```bash
+DATABASE_URL="postgresql://postgres:postgres@localhost:5432/vizboard_main?schema=public"
+AUTH_SECRET="HvZ8xQ3KjL9mN2pR5tY7wB0cD1fG4hJ6kM8nP9qS2uV5xA=="
+NEXTAUTH_URL="http://localhost:3000"
+ENCRYPTION_KEY="8K9mN0pQ3rS5tU7vX9yA1bC3dE5fG7hI9jK1lM3nO5p=="
+NODE_ENV="development"
+```
+
+</Step>
+
+</Steps>
+
+## Security Best Practices
+
+<Card title="Credential Encryption" icon="lock">
+VizBoard uses **AES-256-GCM encryption** to protect external database connection credentials. All database passwords and connection strings are encrypted before being stored in the main database, ensuring sensitive information is never stored in plain text.
+</Card>
+
+### Production Considerations
+
+<Warning>
+When deploying to production:
+- Use environment variables provided by your hosting platform (Vercel, AWS, etc.)
+- Never use the same keys for development and production
+- Rotate keys periodically for enhanced security
+- Use strong, unique passwords for all database connections
+- Enable SSL/TLS for database connections when available
+</Warning>
+
+### Key Rotation
+
+If you need to rotate the `ENCRYPTION_KEY`:
+
+1. **Do not** simply change the key - this will break decryption of existing credentials
+2. Implement a migration strategy to re-encrypt existing data with the new key
+3. Consider implementing a key versioning system for seamless rotation
+
+<Note>
+Key rotation requires careful planning. Contact your system administrator or review the codebase for migration strategies before rotating encryption keys.
+</Note>
+
+## Next Steps
+
+Once your environment is configured:
+
+1. [Set up your databases](/development/docker) using Docker Compose
+2. [Run Prisma migrations](/development/database-setup) to initialize your database schema
+3. Start the development server with `npm run dev`
+
+## Troubleshooting
+
+### Invalid AUTH_SECRET Length
+
+If you see authentication errors, ensure your `AUTH_SECRET` is at least 32 characters long. Use the OpenSSL command above to generate a proper key.
+
+### Database Connection Failed
+
+Verify that:
+- Your PostgreSQL database is running (via Docker or locally)
+- The `DATABASE_URL` connection string is correct
+- The database name, user, and password match your configuration
+- The port (default 5432) is not blocked by a firewall
+
+### Encryption/Decryption Errors
+
+If you encounter encryption errors:
+- Ensure `ENCRYPTION_KEY` is exactly 32 bytes in base64 format
+- Use the Node.js command above to generate a valid key
+- Do not manually edit or truncate the generated key

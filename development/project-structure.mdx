@@ -1,0 +1,1064 @@
+---
+title: Project Structure
+description: Directory organization and code architecture of VizBoard
+---
+
+## Overview
+
+VizBoard follows a modular, feature-based directory structure that separates concerns and promotes code reusability.
+
+## Root Directory
+
+```plaintext
+vizboard/
+├── src/                    # Application source code
+├── prisma/                 # Database schema and migrations
+├── public/                 # Static assets
+├── scripts/                # Database seeding scripts
+├── docker-compose.yml      # Local database setup
+├── package.json            # Dependencies and scripts
+├── tsconfig.json           # TypeScript configuration
+├── tailwind.config.ts      # Tailwind CSS configuration
+├── next.config.js          # Next.js configuration
+└── .env                    # Environment variables
+```
+
+## Source Directory (`src/`)
+
+<CodeGroup>
+
+```plaintext High-Level Structure
+src/
+├── app/                    # Next.js App Router
+├── components/             # React components
+├── lib/                    # Utilities and helpers
+├── hooks/                  # Custom React hooks
+├── store/                  # Zustand state stores
+├── types/                  # TypeScript type definitions
+├── contexts/               # React contexts
+└── pages/                  # Special Next.js pages
+```
+
+</CodeGroup>
+
+## App Directory (`src/app/`)
+
+### Route Structure
+
+The `app/` directory uses Next.js 15 App Router with file-based routing:
+
+<Accordion title="Authentication Routes">
+
+```plaintext
+app/(auth)/
+├── layout.tsx              # Auth layout (centered forms)
+├── login/
+│   └── page.tsx           # Login page
+└── signup/
+    └── page.tsx           # Signup page
+```
+
+**Features:**
+- Route group `(auth)` excludes path from URL
+- Shared layout for login/signup
+- Server-side form validation
+- Redirect after successful auth
+
+</Accordion>
+
+<Accordion title="Homepage Routes">
+
+```plaintext
+app/(homepage)/
+├── layout.tsx              # Public layout
+└── page.tsx               # Landing page
+```
+
+**Features:**
+- Public-facing homepage
+- Marketing content
+- Call-to-action for signup
+
+</Accordion>
+
+<Accordion title="Project Routes">
+
+```plaintext
+app/projects/
+├── page.tsx                          # Projects list (Server Component)
+├── ProjectsClientPage.tsx            # Client-side interactions
+└── [projectId]/                      # Dynamic project routes
+    └── dashboard/
+        ├── page.tsx                  # Dashboard (Server Component)
+        ├── pageClient.tsx            # Dashboard client logic
+        ├── DashboardPageWrapper.tsx  # Layout wrapper
+        └── not-found.tsx            # 404 handler
+```
+
+**Features:**
+- Dynamic routes with `[projectId]`
+- Server Components for data fetching
+- Client Components for interactivity
+- Nested layouts
+
+</Accordion>
+
+<Accordion title="Public Sharing Routes">
+
+```plaintext
+app/public/
+└── [idPublic]/
+    ├── page.tsx           # Public dashboard view
+    └── not-found.tsx      # Invalid share link
+```
+
+**Features:**
+- Share dashboards with public URL
+- No authentication required
+- Read-only view
+
+</Accordion>
+
+<Accordion title="Settings Routes">
+
+```plaintext
+app/settings/
+└── page.tsx               # User settings
+```
+
+**Features:**
+- Profile management
+- Password updates
+- Account preferences
+
+</Accordion>
+
+### Server Actions
+
+Server Actions are organized by domain:
+
+<CardGroup cols={2}>
+
+<Card title="Auth Actions" icon="user-lock">
+```plaintext
+app/actions/auth/
+└── signUp.ts
+```
+
+- User registration
+- Password hashing
+- Input validation
+</Card>
+
+<Card title="Project Actions" icon="folder">
+```plaintext
+app/actions/project/
+├── crud.ts               # CRUD operations
+├── connections.ts        # Connection management
+├── database.ts          # Schema introspection
+├── validation.ts        # Connection validation
+├── revalidation.ts      # Cache invalidation
+└── index.ts             # Exports
+```
+
+- Create/update/delete projects
+- Manage connections
+- Validate credentials
+- Introspect schemas
+</Card>
+
+<Card title="Dashboard Actions" icon="chart-line">
+```plaintext
+app/actions/dashboard/
+├── crudWidgets.ts       # Widget CRUD
+├── deleteWidget.ts      # Delete handler
+├── getTableData.ts      # Data fetching
+├── updateWidgetOrder.ts # Reordering
+├── upsertWidget.ts      # Create/update
+└── index.ts             # Exports
+```
+
+- Widget operations
+- Data queries
+- Order management
+</Card>
+
+<Card title="User Actions" icon="user">
+```plaintext
+app/actions/user/
+└── user.ts
+```
+
+- Profile updates
+- Password changes
+- Settings
+</Card>
+
+</CardGroup>
+
+### API Routes
+
+API routes for client-side data fetching:
+
+<Accordion title="API Endpoints Structure">
+
+```plaintext
+app/api/
+├── auth/
+│   └── [...nextauth]/
+│       └── route.ts                 # NextAuth.js handler
+├── projects/
+│   └── [projectId]/
+│       ├── dashboard/
+│       │   └── route.ts            # GET dashboard data
+│       ├── public/
+│       │   └── route.ts            # GET public dashboard
+│       └── widgets/
+│           └── order/
+│               └── route.ts        # PATCH widget order
+├── widgets/
+│   └── [widgetId]/
+│       └── route.ts                # GET/PATCH/DELETE widget
+├── userprojects/
+│   └── route.ts                    # GET user's projects
+├── listconnections/
+│   └── route.ts                    # GET project connections
+└── compatible-tables/
+    └── route.ts                    # GET compatible table schemas
+```
+
+**Route Handlers:**
+```typescript
+// GET /api/projects/[projectId]/dashboard
+export async function GET(request: Request, { params })
+
+// PATCH /api/widgets/[widgetId]
+export async function PATCH(request: Request, { params })
+
+// DELETE /api/widgets/[widgetId]
+export async function DELETE(request: Request, { params })
+```
+
+</Accordion>
+
+### Root Layout
+
+<Accordion title="app/layout.tsx">
+
+```typescript
+import { Inter } from "next/font/google"
+import { ThemeProvider } from "@/components/theme-provider"
+import { Toaster } from "@/components/ui/sonner"
+import { SessionProviderContext } from "@/components/providers/session-provider"
+
+export default function RootLayout({ children }) {
+  return (
+    <html lang="en" suppressHydrationWarning>
+      <body className={inter.className}>
+        <ThemeProvider
+          attribute="class"
+          defaultTheme="system"
+          enableSystem
+        >
+          <LanguageProvider>
+            <SessionProviderContext>
+              {children}
+              <Toaster />
+            </SessionProviderContext>
+          </LanguageProvider>
+        </ThemeProvider>
+      </body>
+    </html>
+  )
+}
+```
+
+**Providers:**
+- Theme (light/dark mode)
+- Session (authentication)
+- Language (i18n)
+- Toast notifications
+
+</Accordion>
+
+## Components Directory (`src/components/`)
+
+### Component Organization
+
+<CardGroup cols={2}>
+
+<Card title="Auth Components" icon="key">
+```plaintext
+components/auth/
+├── cardWrapper.tsx
+├── login-form.tsx
+├── signup-form.tsx
+└── oAuths.tsx
+```
+
+- Form wrappers
+- OAuth buttons
+- Input fields
+</Card>
+
+<Card title="Project Components" icon="folder">
+```plaintext
+components/projects/
+├── cards/              # Project cards
+├── dialogs/            # Create/edit dialogs
+├── forms/              # Project forms
+└── lists/              # Project lists
+```
+
+- Project cards
+- Creation forms
+- Connection forms
+- Project lists
+</Card>
+
+<Card title="Dashboard Components" icon="dashboard">
+```plaintext
+components/dashboard/
+├── layouts/
+│   ├── dashboardLayout.tsx
+│   └── PublicDashboardLayout.tsx
+├── navigation/
+│   ├── appSidebar.tsx
+│   └── addWidget.tsx
+└── widgets/
+    ├── charts/
+    ├── datatable/
+    ├── integratedDatatable/
+    ├── textblocks/
+    └── shared/
+```
+
+- Dashboard layouts
+- Sidebar navigation
+- Widget components
+</Card>
+
+<Card title="UI Components" icon="palette">
+```plaintext
+components/ui/
+├── button.tsx
+├── dialog.tsx
+├── input.tsx
+├── select.tsx
+├── table.tsx
+├── card.tsx
+├── tabs.tsx
+└── ... (40+ components)
+```
+
+- Radix UI wrappers
+- Styled with Tailwind
+- Reusable primitives
+</Card>
+
+</CardGroup>
+
+### Widget Components
+
+<Accordion title="Chart Widgets">
+
+```plaintext
+components/dashboard/widgets/charts/
+├── barChart.tsx           # Bar chart widget
+├── lineChart.tsx          # Line chart widget
+├── areaChart.tsx          # Area chart widget
+├── chartConfig.tsx        # Configuration dialog
+└── utils/
+    ├── aggregation.ts     # Data aggregation
+    ├── grouping.ts        # Data grouping
+    └── formatting.ts      # Value formatting
+```
+
+**Features:**
+- Recharts integration
+- Data aggregation (sum, avg)
+- Grouping by columns
+- Responsive sizing
+
+</Accordion>
+
+<Accordion title="DataTable Widgets">
+
+```plaintext
+components/dashboard/widgets/datatable/
+├── dataTable.tsx          # Simple table widget
+├── columns.tsx            # Column definitions
+├── dataTableConfig.tsx    # Configuration dialog
+└── filters/
+    ├── searchFilter.tsx   # Search functionality
+    ├── columnFilter.tsx   # Column filtering
+    └── pagination.tsx     # Pagination controls
+```
+
+**Features:**
+- TanStack Table integration
+- Sorting (multi-column)
+- Filtering
+- Pagination
+- Column visibility
+
+</Accordion>
+
+<Accordion title="Integrated DataTable">
+
+```plaintext
+components/dashboard/widgets/integratedDatatable/
+├── integratedTable.tsx           # Multi-connection table
+├── integratedTableConfig.tsx     # Configuration
+└── utils/
+    └── dataFetching.ts          # Parallel data fetching
+```
+
+**Features:**
+- Compare data from multiple connections
+- Join data client-side
+- Unified column mapping
+
+</Accordion>
+
+## Library Directory (`src/lib/`)
+
+### Authentication
+
+<Accordion title="lib/auth/">
+
+```plaintext
+lib/auth/
+├── auth.ts               # NextAuth.js configuration
+└── userSchema.ts         # Zod validation schemas
+```
+
+```typescript auth.ts
+export const { handlers, signIn, signOut, auth } = NextAuth({
+  adapter: PrismaAdapter(prisma),
+  session: { strategy: "jwt" },
+  providers: [Google, GitHub, Credentials],
+  callbacks: { ... },
+})
+```
+
+</Accordion>
+
+### Database
+
+<Accordion title="lib/db/">
+
+```plaintext
+lib/db/
+└── prisma.ts             # Prisma client singleton
+```
+
+```typescript prisma.ts
+import { PrismaClient } from '@prisma/client'
+
+const globalForPrisma = global as unknown as { prisma: PrismaClient }
+
+const prisma = globalForPrisma.prisma || new PrismaClient()
+
+if (process.env.NODE_ENV !== 'production') {
+  globalForPrisma.prisma = prisma
+}
+
+export default prisma
+```
+
+**Purpose:**
+- Singleton pattern
+- Prevents multiple instances in development
+- Connection pooling
+
+</Accordion>
+
+### Encryption
+
+<Accordion title="lib/crypto/">
+
+```plaintext
+lib/crypto/
+└── crypto.ts             # AES-256-GCM encryption
+```
+
+```typescript crypto.ts
+export function encrypt(text: string): string
+export function decrypt(encryptedData: string): string
+```
+
+**Used for:**
+- Database connection credentials
+- Sensitive configuration
+- AES-256-GCM with authentication tags
+
+</Accordion>
+
+### Project Utilities
+
+<Accordion title="lib/projects/">
+
+```plaintext
+lib/projects/
+├── schemas/              # Zod validation schemas
+│   ├── index.ts
+│   ├── project.ts
+│   └── connection.ts
+└── queries/              # Reusable database queries
+```
+
+**Schemas:**
+- Project creation/update validation
+- Connection validation
+- Type inference
+
+</Accordion>
+
+### Adapters
+
+<Accordion title="lib/adapters/">
+
+```plaintext
+lib/adapters/
+└── prisma.ts             # Custom Prisma adapter extensions
+```
+
+</Accordion>
+
+### Other Utilities
+
+<CodeGroup>
+
+```plaintext Widget Utilities
+lib/
+├── widget.ts            # Widget type helpers
+├── extractWidgetTypeInfo.ts
+└── revalidate.ts        # Cache revalidation
+```
+
+```plaintext SWR Config
+lib/
+└── swrConfig.ts         # SWR configuration
+```
+
+```plaintext General Utils
+lib/
+└── utils.ts             # cn() for className merging
+```
+
+</CodeGroup>
+
+## Hooks Directory (`src/hooks/`)
+
+### Custom React Hooks
+
+<CardGroup cols={2}>
+
+<Card title="Project Hooks" icon="folder">
+```plaintext
+hooks/projects/
+├── useProjectsWithStore.ts
+├── useProjectConnections.ts
+└── index.ts
+```
+
+- Fetch projects with SWR
+- Manage connections
+- Cache management
+</Card>
+
+<Card title="Widget Hooks" icon="chart-line">
+```plaintext
+hooks/
+├── useWidget.ts
+├── useTableDataWithSchema.ts
+└── useIntegratedTableData.ts
+```
+
+- Widget data fetching
+- Table data with caching
+- Multi-connection queries
+</Card>
+
+<Card title="UI Hooks" icon="mobile">
+```plaintext
+hooks/
+├── use-mobile.ts
+└── useOnlineStatus.ts
+```
+
+- Mobile detection
+- Network status
+- Responsive behavior
+</Card>
+
+</CardGroup>
+
+<Accordion title="Example: useProjectsWithStore">
+
+```typescript
+import useSWR from 'swr'
+import { useProjectsStore } from '@/store/projects'
+
+export function useProjectsWithStore() {
+  const { data, error, isLoading, mutate } = useSWR(
+    '/api/userprojects',
+    fetcher
+  )
+  
+  const { setProjects } = useProjectsStore()
+  
+  useEffect(() => {
+    if (data?.projects) {
+      setProjects(data.projects)
+    }
+  }, [data])
+  
+  return {
+    projects: data?.projects || [],
+    isLoading,
+    error,
+    refresh: mutate,
+  }
+}
+```
+
+</Accordion>
+
+## Store Directory (`src/store/`)
+
+### Zustand State Stores
+
+<CardGroup cols={2}>
+
+<Card title="Dashboard Stores" icon="chart-line">
+```plaintext
+store/dashboard/
+├── widgetsStore.ts
+├── widgetDialogStore.ts
+└── index.ts
+```
+
+- Widget list state
+- Dialog open/close
+- Editing widget
+</Card>
+
+<Card title="Project Stores" icon="folder">
+```plaintext
+store/projects/
+├── projectsStore.ts
+├── projectDraftStore.ts
+└── index.ts
+```
+
+- Projects list
+- Draft persistence
+- Form state
+</Card>
+
+</CardGroup>
+
+<Accordion title="Example: widgetDialogStore.ts">
+
+```typescript
+import { create } from 'zustand'
+import type { Widget } from '@/types/widget'
+
+interface WidgetDialogStore {
+  isOpen: boolean
+  widgetType: string | null
+  editingWidget: Widget | null
+  openDialog: (type: string) => void
+  openEditDialog: (widget: Widget) => void
+  closeDialog: () => void
+}
+
+export const useWidgetDialog = create<WidgetDialogStore>((set) => ({
+  isOpen: false,
+  widgetType: null,
+  editingWidget: null,
+  
+  openDialog: (type) => set({
+    isOpen: true,
+    widgetType: type,
+    editingWidget: null,
+  }),
+  
+  openEditDialog: (widget) => set({
+    isOpen: true,
+    widgetType: widget.type,
+    editingWidget: widget,
+  }),
+  
+  closeDialog: () => set({
+    isOpen: false,
+    widgetType: null,
+    editingWidget: null,
+  }),
+}))
+```
+
+</Accordion>
+
+## Types Directory (`src/types/`)
+
+### TypeScript Definitions
+
+```plaintext
+types/
+├── auth.d.ts             # NextAuth.js type extensions
+├── widget.ts             # Widget type definitions
+├── database.ts           # Database schema types
+└── api.ts                # API response types
+```
+
+<Accordion title="Example: NextAuth Type Extensions">
+
+```typescript auth.d.ts
+import 'next-auth'
+
+declare module 'next-auth' {
+  interface User {
+    id: string
+    firstName?: string
+    lastName?: string
+    password?: string | null
+  }
+  
+  interface Session {
+    user: {
+      id: string
+      email?: string
+      name?: string
+      firstName?: string
+      lastName?: string
+    }
+  }
+}
+
+declare module 'next-auth/jwt' {
+  interface JWT {
+    id?: string
+    firstName?: string
+    lastName?: string
+  }
+}
+```
+
+</Accordion>
+
+## Prisma Directory
+
+### Database Schema & Migrations
+
+```plaintext
+prisma/
+├── schema.prisma         # Database schema definition
+├── migrations/           # Migration history
+│   ├── 20240101_init/
+│   ├── 20240105_add_widgets/
+│   └── migration_lock.toml
+└── seed.ts              # Database seeding script
+```
+
+<Accordion title="Prisma Schema Structure">
+
+```prisma schema.prisma
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(uuid())
+  firstName     String?
+  lastName      String?
+  email         String    @unique
+  password      String?
+  projects      Project[]
+  accounts      Account[]
+  @@map("users")
+}
+
+model Project {
+  id                  String         @id @default(uuid())
+  userId              String
+  title               String
+  description         String?
+  isPublic            Boolean        @default(false)
+  idPublic            String?        @unique
+  dbconnections       DbConnection[]
+  widgets             Widget[]
+  orderedWidgetIds    String[]
+  user                User           @relation(...)
+  @@map("projects")
+}
+
+model DbConnection {
+  id                  String    @id @default(uuid())
+  projectId           String
+  title               String
+  dbAccess            Json      # Encrypted credentials
+  dbSchema            Json?     # Cached schema
+  isValid             Boolean?
+  validationError     String?
+  lastIntrospectionAt DateTime?
+  project             Project   @relation(...)
+  @@map("dbconnections")
+}
+
+model Widget {
+  id          String   @id @default(uuid())
+  projectId   String
+  title       String
+  description String?
+  type        String   # bar, line, area, datatable, etc.
+  subtype     String?  # Simple, integrated, etc.
+  configs     Json?    # Widget-specific config
+  project     Project  @relation(...)
+  @@map("widgets")
+}
+```
+
+**Key Features:**
+- UUID primary keys
+- Cascade deletes
+- JSON for flexible configs
+- Encrypted credentials
+- Schema caching
+
+</Accordion>
+
+## Scripts Directory
+
+### Database Seeding Scripts
+
+```plaintext
+scripts/
+├── seed_store.js         # Seed store data (test DB 1 & 2)
+├── seed_clients.js       # Seed clients (test DB 3)
+├── seed_commandes.js     # Seed orders (test DB 3)
+└── seed_apirequestevent.js # Seed API events (test DB 3)
+```
+
+<Accordion title="Seeding Purpose">
+
+These scripts populate external PostgreSQL test databases with sample data for widget testing:
+
+```bash
+# Seed all test databases
+npm run seed:test-dbs
+
+# Or individual databases
+npm run seed:store       # Products, users, sales, reviews
+npm run seed:clients     # Client records
+npm run seed:commandes   # Order records
+```
+
+**Generated Data:**
+- 100-1000 realistic records
+- Uses Faker.js for names, dates, etc.
+- Relational data (foreign keys)
+- Time-series data for charts
+
+</Accordion>
+
+## Configuration Files
+
+### Next.js Configuration
+
+<CodeGroup>
+
+```javascript next.config.js
+module.exports = {
+  reactStrictMode: true,
+  experimental: {
+    serverActions: true,
+  },
+  images: {
+    domains: ['lh3.googleusercontent.com', 'avatars.githubusercontent.com'],
+  },
+}
+```
+
+```typescript tsconfig.json
+{
+  "compilerOptions": {
+    "target": "ES2020",
+    "lib": ["ES2020", "DOM"],
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "jsx": "preserve",
+    "paths": {
+      "@/*": ["./src/*"]
+    },
+    "strict": true
+  },
+  "include": ["src"],
+  "exclude": ["node_modules"]
+}
+```
+
+```javascript tailwind.config.ts
+export default {
+  content: ['./src/**/*.{ts,tsx}'],
+  darkMode: 'class',
+  theme: {
+    extend: {
+      colors: { ... },
+      borderRadius: { ... },
+    },
+  },
+  plugins: [],
+}
+```
+
+</CodeGroup>
+
+## Import Aliases
+
+VizBoard uses TypeScript path aliases for cleaner imports:
+
+```typescript
+// Instead of:
+import { Button } from '../../../components/ui/button'
+
+// Use:
+import { Button } from '@/components/ui/button'
+```
+
+**Configuration:**
+```json tsconfig.json
+{
+  "compilerOptions": {
+    "paths": {
+      "@/*": ["./src/*"]
+    }
+  }
+}
+```
+
+## File Naming Conventions
+
+<CardGroup cols={2}>
+
+<Card title="React Components" icon="react">
+**PascalCase**
+
+- `Button.tsx`
+- `DashboardLayout.tsx`
+- `ProjectCard.tsx`
+</Card>
+
+<Card title="Utilities & Hooks" icon="wrench">
+**camelCase**
+
+- `utils.ts`
+- `useProjects.ts`
+- `swrConfig.ts`
+</Card>
+
+<Card title="Server Actions" icon="server">
+**camelCase**
+
+- `crud.ts`
+- `signUp.ts`
+- `getTableData.ts`
+</Card>
+
+<Card title="Route Files" icon="route">
+**Next.js Convention**
+
+- `page.tsx` (route)
+- `layout.tsx` (layout)
+- `route.ts` (API route)
+- `not-found.tsx` (404)
+</Card>
+
+</CardGroup>
+
+## Code Organization Principles
+
+<Accordion title="Separation of Concerns">
+
+1. **Server Components** - Data fetching and rendering
+2. **Client Components** - Interactivity and state
+3. **Server Actions** - Data mutations
+4. **API Routes** - Client-side data fetching
+5. **Hooks** - Reusable logic
+6. **Stores** - Global state
+7. **Components** - Reusable UI
+
+</Accordion>
+
+<Accordion title="Feature-Based Organization">
+
+```plaintext
+projects/
+├── components/projects/   # Project-specific UI
+├── actions/project/       # Project mutations
+├── hooks/projects/        # Project data hooks
+└── store/projects/        # Project state
+```
+
+Benefits:
+- Easy to find related code
+- Clear dependencies
+- Better modularity
+- Scalable structure
+
+</Accordion>
+
+<Accordion title="Colocation Principle">
+
+Keep related files close together:
+
+```plaintext
+widgets/
+├── charts/
+│   ├── barChart.tsx       # Component
+│   ├── chartConfig.tsx    # Config dialog
+│   └── utils/             # Chart-specific utils
+│       ├── aggregation.ts
+│       └── formatting.ts
+```
+
+</Accordion>
+
+## Best Practices
+
+<Note>
+**Key Guidelines:**
+
+1. **Server Components by default** - Only add `"use client"` when needed
+2. **Colocation** - Keep related files together
+3. **Type safety** - Use TypeScript everywhere
+4. **Validation** - Zod schemas for all inputs
+5. **Error handling** - Try-catch in Server Actions
+6. **Revalidation** - Invalidate cache after mutations
+7. **Security** - Encrypt sensitive data
+8. **Performance** - Optimize database queries
+
+</Note>
+
+## Growing the Codebase
+
+When adding new features:
+
+1. **New widget type?** → Add to `components/dashboard/widgets/`
+2. **New data operation?** → Add Server Action to `app/actions/`
+3. **New route?** → Add to `app/` with appropriate route group
+4. **Reusable logic?** → Create custom hook in `hooks/`
+5. **Global state?** → Add Zustand store in `store/`
+6. **New utility?** → Add to `lib/`
+7. **Database change?** → Update Prisma schema and migrate
+
+<Note>
+The structure is designed to scale from small teams to large applications while maintaining clarity and organization.
+</Note>

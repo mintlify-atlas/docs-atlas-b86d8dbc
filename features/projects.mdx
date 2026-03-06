@@ -1,0 +1,422 @@
+---
+title: 'Project Management'
+description: 'Create, configure, and manage data visualization projects with database connections'
+icon: 'folder-kanban'
+---
+
+## Overview
+
+Projects are the foundation of VizBoard's data visualization platform. Each project contains database connections, widgets, and dashboards that visualize your data. Projects can be private or public, allowing you to share your visualizations with others.
+
+## Project Structure
+
+Every project in VizBoard includes:
+
+<CardGroup cols={2}>
+  <Card title="Database Connections" icon="database">
+    Connect to PostgreSQL databases to access your data
+  </Card>
+  <Card title="Widgets" icon="chart-line">
+    Create visualizations from your connected data sources
+  </Card>
+  <Card title="Dashboards" icon="grip">
+    Organize widgets in a customizable layout
+  </Card>
+  <Card title="Sharing Options" icon="share">
+    Control project visibility with public or private access
+  </Card>
+</CardGroup>
+
+## Creating a Project
+
+Projects can be created with or without database connections. The project creation process automatically validates connections and introspects database schemas.
+
+<Steps>
+  <Step title="Initialize Project">
+    Provide a title and optional description for your project:
+
+    ```typescript
+    const projectData = {
+      title: "Sales Analytics Dashboard",
+      description: "Quarterly sales performance metrics",
+      isPublic: false,
+      userId: session.user.id,
+      connections: []
+    };
+    ```
+  </Step>
+
+  <Step title="Add Database Connections">
+    Configure one or more PostgreSQL database connections. Connections are encrypted before storage:
+
+    ```typescript
+    const connections = [
+      {
+        title: "Production DB",
+        host: "db.example.com",
+        port: 5432,
+        database: "sales_data",
+        user: "analytics_user",
+        password: "secure_password"
+      }
+    ];
+    ```
+
+    See [Database Connections](/features/database-connections) for detailed configuration options.
+  </Step>
+
+  <Step title="Create with Server Action">
+    Use the `createProjectWithConnections` Server Action:
+
+    ```typescript
+    import { createProjectWithConnections } from "@/app/actions/project";
+
+    const result = await createProjectWithConnections({
+      title: projectData.title,
+      description: projectData.description,
+      isPublic: projectData.isPublic,
+      userId: session.user.id,
+      connections: connections
+    });
+
+    if (result.success) {
+      console.log("Project created:", result.projectId);
+      console.log("Validation result:", result.validationResult);
+    }
+    ```
+  </Step>
+</Steps>
+
+### Auto-Introspection
+
+When you create a project with database connections, VizBoard automatically:
+
+1. **Validates** each connection to ensure it can connect to the database
+2. **Introspects** the database schema for valid connections
+3. **Stores** schema metadata for use in widget configuration
+
+```typescript src/app/actions/project/crud.ts
+// After validation, introspect valid connections
+if (validationResult?.success && validationResult?.connectionStatuses) {
+  const validConnections = validationResult.connectionStatuses.filter(
+    (conn) => conn.isValid
+  );
+
+  // Introspect each valid connection in parallel
+  const introspectionPromises = validConnections.map(
+    async (connStatus) => {
+      await CreateDbSchema(connStatus.id);
+      return { connectionId: connStatus.id, success: true };
+    }
+  );
+}
+```
+
+<Note>
+  Schema introspection runs automatically after connection validation. You don't need to manually trigger it unless you want to refresh the schema after database changes.
+</Note>
+
+## Updating Projects
+
+Projects can be updated at any time, including their metadata and database connections.
+
+### Update Project Metadata
+
+```typescript
+import { updateProject } from "@/app/actions/project";
+
+const result = await updateProject({
+  id: projectId,
+  title: "Updated Title",
+  description: "New description",
+  isPublic: true
+});
+```
+
+### Update Database Connections
+
+You can add, modify, or remove database connections when updating a project:
+
+```typescript
+await updateProject({
+  id: projectId,
+  connections: [
+    {
+      id: existingConnectionId,  // Include ID to update existing
+      title: "Updated Connection",
+      host: "new-host.example.com",
+      port: 5432,
+      database: "new_database",
+      user: "user",
+      password: "KEEP_CURRENT_PASSWORD"  // Special value to keep existing password
+    },
+    {
+      // No ID means this is a new connection
+      title: "New Connection",
+      host: "db2.example.com",
+      port: 5432,
+      database: "analytics",
+      user: "readonly",
+      password: "new_password"
+    }
+  ]
+});
+```
+
+<Note>
+  Use `"KEEP_CURRENT_PASSWORD"` as the password value to preserve the existing encrypted password for a connection.
+</Note>
+
+### Connection Validation on Update
+
+When updating a project, VizBoard automatically:
+
+- Validates all connections (new and existing)
+- Re-introspects schemas for valid connections
+- Updates connection status badges in the UI
+- Disables public sharing if no valid connections exist
+
+```typescript src/app/actions/project/crud.ts
+// If project has no valid connections, force isPublic=false
+const validConnections = updatedConnections.filter(
+  (conn) => conn.isValid === true
+).length;
+
+if (validConnections === 0) {
+  await tx.project.update({
+    where: { id: data.id },
+    data: { isPublic: false, idPublic: null },
+  });
+}
+```
+
+## Deleting Projects
+
+Deleting a project is permanent and cascades to all related resources.
+
+```typescript
+import { deleteProject } from "@/app/actions/project";
+
+const result = await deleteProject(projectId, userId);
+
+if (result.success) {
+  console.log(result.message); // "Project 'Title' deleted successfully"
+}
+```
+
+### What Gets Deleted
+
+When you delete a project, VizBoard removes:
+
+<Steps>
+  <Step title="Widgets">
+    All visualization widgets associated with the project
+  </Step>
+  <Step title="Database Connections">
+    All database connection configurations (encrypted credentials are removed)
+  </Step>
+  <Step title="Project Data">
+    The project record and all metadata
+  </Step>
+</Steps>
+
+<Note type="warning">
+  Project deletion is permanent and cannot be undone. Make sure to export any important visualizations before deleting a project.
+</Note>
+
+## Public vs Private Projects
+
+VizBoard supports two visibility modes for projects:
+
+### Private Projects (Default)
+
+Private projects are only accessible to the project owner:
+
+```typescript
+const project = {
+  title: "Internal Analytics",
+  isPublic: false,  // Default
+  // Only accessible at /projects/{projectId}/dashboard
+};
+```
+
+### Public Projects
+
+Public projects can be shared via a public URL:
+
+```typescript
+const project = {
+  title: "Public Dashboard",
+  isPublic: true,
+  idPublic: "abc123def456",  // Auto-generated unique ID
+  // Accessible at /public/{idPublic}
+};
+```
+
+<Note type="warning">
+  Projects can only be made public if they have at least one valid database connection. VizBoard automatically sets `isPublic: false` if all connections become invalid.
+</Note>
+
+### Public Sharing Requirements
+
+To enable public sharing:
+
+1. Project must have at least one **valid** database connection
+2. Connection validation must pass successfully
+3. Database schema must be introspected
+
+```typescript
+// Public sharing is automatically disabled without valid connections
+if (validConnections === 0) {
+  project.isPublic = false;
+  project.idPublic = null;
+}
+```
+
+## Retrieving Projects
+
+### Get Single Project
+
+Retrieve a project with all its connections and metadata:
+
+```typescript
+import { getProjectWithConnections } from "@/app/actions/project";
+
+const result = await getProjectWithConnections(projectId, userId);
+
+if (result.success) {
+  const project = result.data;
+  console.log(project.title);
+  console.log(project.databases);  // Array of connections with status
+  console.log(project.orderedWidgetIds);  // Widget display order
+}
+```
+
+### Get All User Projects
+
+Retrieve all projects for the authenticated user with statistics:
+
+```typescript
+import { getUserProjects } from "@/app/actions/project";
+
+const result = await getUserProjects(userId);
+
+if (result.success) {
+  result.data.forEach(project => {
+    console.log(project.title);
+    console.log(`Connections: ${project.validConnections}/${project.totalConnections}`);
+    console.log(`Widgets: ${project.widgetCount}`);
+    console.log(`Last validation: ${project.lastValidationDate}`);
+  });
+}
+```
+
+### Project Statistics
+
+The `getUserProjects` action returns rich metadata for each project:
+
+<Accordion title="Project Statistics Fields">
+  ```typescript
+  interface ProjectWithStats {
+    // Basic fields
+    id: string;
+    title: string;
+    description: string | null;
+    isPublic: boolean;
+    createdAt: Date;
+    updatedAt: Date;
+    
+    // Connection statistics
+    totalConnections: number;
+    validConnections: number;
+    hasValidatedConnections: boolean;
+    lastValidationDate?: Date;
+    
+    // Schema statistics
+    totalSchemas: number;
+    validSchemas: number;
+    hasIntrospectedSchemas: boolean;
+    lastSchemaIntrospectionAt?: Date;
+    
+    // Widget statistics
+    widgetCount: number;
+  }
+  ```
+</Accordion>
+
+## Schema Regeneration
+
+Refresh database schemas for all valid connections in a project:
+
+```typescript
+import { regenerateProjectSchemas } from "@/app/actions/project";
+
+const result = await regenerateProjectSchemas(projectId, userId);
+
+if (result.success) {
+  console.log(`Regenerated: ${result.data.successfulRegeneration}/${result.data.totalConnections}`);
+  
+  result.data.details.forEach(detail => {
+    console.log(`${detail.connectionTitle}: ${detail.success ? 'Success' : detail.error}`);
+  });
+}
+```
+
+<Note>
+  Schema regeneration is useful after making changes to your database structure (adding tables, columns, etc.). Only connections with `isValid: true` are re-introspected.
+</Note>
+
+## Data Model
+
+Projects are stored in the Prisma schema with the following structure:
+
+```prisma prisma/schema.prisma
+model Project {
+  id                  String         @id @default(uuid())
+  userId              String
+  title               String
+  description         String?
+  isPublic            Boolean        @default(false)
+  idPublic            String?        @unique
+  createdAt           DateTime       @default(now())
+  updatedAt           DateTime       @updatedAt
+  lastIntrospectionAt DateTime?
+  dbconnections       DbConnection[]
+  user                User           @relation(fields: [userId], references: [id], onDelete: Cascade)
+  widgets             Widget[]
+  orderedWidgetIds    String[]
+
+  @@map("projects")
+}
+```
+
+## Best Practices
+
+<CardGroup cols={2}>
+  <Card title="Use Descriptive Titles" icon="heading">
+    Choose clear project titles that describe the data or purpose
+  </Card>
+  <Card title="Document Your Projects" icon="file-text">
+    Add descriptions to help team members understand the project's purpose
+  </Card>
+  <Card title="Validate Regularly" icon="check-circle">
+    Run validation checks after database changes to ensure connections remain valid
+  </Card>
+  <Card title="Control Public Access" icon="lock">
+    Only make projects public when necessary, and review shared dashboards regularly
+  </Card>
+</CardGroup>
+
+## Next Steps
+
+<CardGroup cols={3}>
+  <Card title="Database Connections" icon="database" href="/features/database-connections">
+    Configure PostgreSQL connections
+  </Card>
+  <Card title="Widgets" icon="chart-mixed" href="/features/widgets">
+    Create data visualizations
+  </Card>
+  <Card title="Dashboards" icon="grid" href="/features/dashboards">
+    Build and organize dashboards
+  </Card>
+</CardGroup>
